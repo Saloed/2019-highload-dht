@@ -21,6 +21,7 @@ import java.io.IOException;
 import org.jetbrains.annotations.NotNull;
 
 import ru.mail.polis.dao.DAO;
+import ru.mail.polis.service.saloed.ServiceImpl;
 
 /**
  * Constructs {@link Service} instances.
@@ -53,6 +54,6 @@ public final class ServiceFactory {
             throw new IllegalArgumentException("Port out of range");
         }
 
-        throw new IllegalStateException();
+       return ServiceImpl.create(port, dao);
     }
 }

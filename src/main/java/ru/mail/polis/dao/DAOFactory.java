@@ -52,7 +52,6 @@ public final class DAOFactory {
         if (!data.isDirectory()) {
             throw new IllegalArgumentException("Path is not a directory: " + data);
         }
-
-        throw new IllegalStateException("Not implemented yet");
+        return RocksDAOImpl.create(data);
     }
 }
