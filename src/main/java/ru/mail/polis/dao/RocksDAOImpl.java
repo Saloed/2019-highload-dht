@@ -68,7 +68,7 @@ public class RocksDAOImpl implements DAO {
         try {
             final var valueByteArray = db.get(keyByteArray);
             if (valueByteArray == null) {
-                throw new NoSuchElementException("Key is not present: " + key.toString());
+                throw new NoSuchElementExceptionLite("Key is not present: " + key.toString());
             }
             return ByteBuffer.wrap(valueByteArray);
         } catch (RocksDBException exception) {
