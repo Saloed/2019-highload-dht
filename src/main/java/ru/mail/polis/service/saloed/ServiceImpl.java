@@ -68,4 +68,10 @@ public class ServiceImpl extends HttpServer implements Service {
             return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
         }
     }
+
+    @Override
+    public void handleDefault(final Request request, final HttpSession session) throws IOException {
+        final var response = new Response(Response.BAD_REQUEST, Response.EMPTY);
+        session.sendResponse(response);
+    }
 }
