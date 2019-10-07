@@ -6,7 +6,13 @@ import java.nio.ByteBuffer;
 
 public final class ByteBufferUtils {
 
-    public static byte[] toArray(@NotNull final ByteBuffer buffer){
+    /**
+     * Retrieve array from a {@link java.nio.ByteBuffer}
+     *
+     * @param buffer -- byte buffer to extract from
+     * @return array
+     */
+    public static byte[] toArray(@NotNull final ByteBuffer buffer) {
         final var bufferCopy = buffer.duplicate();
         final var array = new byte[bufferCopy.remaining()];
         bufferCopy.get(array);

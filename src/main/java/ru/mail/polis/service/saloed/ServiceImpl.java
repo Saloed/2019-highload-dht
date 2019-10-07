@@ -12,7 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.NoSuchElementException;
 
-public class ServiceImpl extends HttpServer implements Service {
+public final class ServiceImpl extends HttpServer implements Service {
     private final DAO dao;
 
     private ServiceImpl(final HttpServerConfig config, @NotNull final DAO dao) throws IOException {
@@ -45,24 +45,12 @@ public class ServiceImpl extends HttpServer implements Service {
             final var method = request.getMethod();
             final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
             switch (method) {
-                case Request.METHOD_GET: {
-                    try {
-                        final var value = dao.get(key).duplicate();
-                        final var valueArray = ByteBufferUtils.toArray(value);
-                        return Response.ok(valueArray);
-                    } catch (NoSuchElementException ex) {
-                        return new Response(Response.NOT_FOUND, Response.EMPTY);
-                    }
-                }
-                case Request.METHOD_PUT: {
-                    final var value = ByteBuffer.wrap(request.getBody());
-                    dao.upsert(key, value);
-                    return new Response(Response.CREATED, Response.EMPTY);
-                }
-                case Request.METHOD_DELETE: {
-                    dao.remove(key);
-                    return new Response(Response.ACCEPTED, Response.EMPTY);
-                }
+                case Request.METHOD_GET:
+                    return getEntity(key);
+                case Request.METHOD_PUT:
+                    return putEntity(key, request);
+                case Request.METHOD_DELETE:
+                    return deleteEntity(key);
                 default:
                     return new Response(Response.METHOD_NOT_ALLOWED, Response.EMPTY);
             }
@@ -70,6 +58,28 @@ public class ServiceImpl extends HttpServer implements Service {
             return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
         }
     }
+
+    private Response getEntity(final ByteBuffer key) throws IOException {
+        try {
+            final var value = dao.get(key).duplicate();
+            final var valueArray = ByteBufferUtils.toArray(value);
+            return Response.ok(valueArray);
+        } catch (NoSuchElementException ex) {
+            return new Response(Response.NOT_FOUND, Response.EMPTY);
+        }
+    }
+
+    private Response putEntity(final ByteBuffer key, final Request request) throws IOException {
+        final var value = ByteBuffer.wrap(request.getBody());
+        dao.upsert(key, value);
+        return new Response(Response.CREATED, Response.EMPTY);
+    }
+
+    private Response deleteEntity(final ByteBuffer key) throws IOException {
+        dao.remove(key);
+        return new Response(Response.ACCEPTED, Response.EMPTY);
+    }
+
 
     @Override
     public void handleDefault(final Request request, final HttpSession session) throws IOException {
