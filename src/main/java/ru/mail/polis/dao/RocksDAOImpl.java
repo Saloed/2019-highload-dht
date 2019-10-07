@@ -116,6 +116,11 @@ public class RocksDAOImpl implements DAO {
         }
     }
 
+    /**
+     * According to the documentation {@link org.rocksdb.BuiltinComparator#BYTEWISE_COMPARATOR} is a
+     * native implementation of  {@link org.rocksdb.util.BytewiseComparator} which works a way faster.
+     * But for some unknown reasons, iteration order is different and appropriate tests fails
+     */
     static DAO create(File data) throws IOException {
         RocksDB.loadLibrary();
         try {
@@ -123,6 +128,7 @@ public class RocksDAOImpl implements DAO {
             final var options = new Options()
                     .setCreateIfMissing(true)
                     .setComparator(comparator);
+//                  .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
             final var db = RocksDB.open(options, data.getAbsolutePath());
             return new RocksDAOImpl(db);
         } catch (RocksDBException exception) {
