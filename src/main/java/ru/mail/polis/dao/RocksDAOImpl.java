@@ -14,7 +14,7 @@ import java.util.NoSuchElementException;
 public class RocksDAOImpl implements DAO {
     private final RocksDB db;
 
-    private RocksDAOImpl(RocksDB db) {
+    private RocksDAOImpl(final RocksDB db) {
         this.db = db;
     }
 
