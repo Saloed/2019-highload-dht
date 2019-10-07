@@ -55,7 +55,7 @@ public class RocksDAOImpl implements DAO {
     @NotNull
     @Override
     public Iterator<Record> iterator(@NotNull ByteBuffer from) throws IOException {
-        final var fromByteArray = from.array();
+        final var fromByteArray = ByteBufferUtils.toArray(from);
         final var iterator = db.newIterator();
         iterator.seek(fromByteArray);
         return new RocksRecordIterator(iterator);
@@ -64,7 +64,7 @@ public class RocksDAOImpl implements DAO {
     @NotNull
     @Override
     public ByteBuffer get(@NotNull ByteBuffer key) throws IOException, NoSuchElementException {
-        final var keyByteArray = key.array();
+        final var keyByteArray = ByteBufferUtils.toArray(key);
         try {
             final var valueByteArray = db.get(keyByteArray);
             if (valueByteArray == null) {
@@ -78,8 +78,8 @@ public class RocksDAOImpl implements DAO {
 
     @Override
     public void upsert(@NotNull ByteBuffer key, @NotNull ByteBuffer value) throws IOException {
-        final var keyByteArray = key.array();
-        final var valueByteArray = value.array();
+        final var keyByteArray = ByteBufferUtils.toArray(key);
+        final var valueByteArray = ByteBufferUtils.toArray(value);
         try {
             db.put(keyByteArray, valueByteArray);
         } catch (RocksDBException exception) {
@@ -89,7 +89,7 @@ public class RocksDAOImpl implements DAO {
 
     @Override
     public void remove(@NotNull ByteBuffer key) throws IOException {
-        final var keyByteArray = key.array();
+        final var keyByteArray = ByteBufferUtils.toArray(key);
         try {
             db.delete(keyByteArray);
         } catch (RocksDBException exception) {

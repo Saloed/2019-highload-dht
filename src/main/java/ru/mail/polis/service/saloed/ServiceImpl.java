@@ -3,6 +3,7 @@ package ru.mail.polis.service.saloed;
 import one.nio.http.*;
 import one.nio.server.AcceptorConfig;
 import org.jetbrains.annotations.NotNull;
+import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.service.Service;
 
@@ -47,7 +48,8 @@ public class ServiceImpl extends HttpServer implements Service {
                 case Request.METHOD_GET: {
                     try {
                         final var value = dao.get(key).duplicate();
-                        return Response.ok(value.array());
+                        final var valueArray = ByteBufferUtils.toArray(value);
+                        return Response.ok(valueArray);
                     } catch (NoSuchElementException ex) {
                         return new Response(Response.NOT_FOUND, Response.EMPTY);
                     }
