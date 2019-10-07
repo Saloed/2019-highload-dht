@@ -98,7 +98,7 @@ public interface DAO extends Closeable {
     void remove(@NotNull ByteBuffer key) throws IOException;
 
     /**
-     * Perform compaction
+     * Performs compaction.
      */
     default void compact() throws IOException {
         // Implement me when you get to stage 3

@@ -1,0 +1,47 @@
+version: "2"
+plugins:
+  checkstyle:
+    enabled: true
+    config:
+      file: "checkstyle.xml"
+  pmd:
+    enabled: true
+    config:
+      rules:
+        - "java-basic"
+        - "java-clone"
+        - "java-design"
+        - "java-empty"
+        - "java-finalizers"
+        - "java-imports"
+        - "java-migrating"
+        - "java-optimizations"
+        - "java-strictexception"
+        - "java-strings"
+        - "java-sunsecure"
+        - "java-typeresolution"
+        - "java-unnecessary"
+        - "java-unusedcode"
+    checks:
+      AvoidThrowingRawExceptionTypes:
+        enabled: false 
+  sonar-java:
+    enabled: true
+    config:
+      sonar.java.source: "11"
+    checks:
+      squid:S00112:
+        enabled: false
+checks:
+  method-lines:
+    config:
+      threshold: 80 # No more than 2 screens
+  method-complexity:
+    config:
+      threshold: 15 # We are Russian hackers!
+  similar-code:
+    config:
+      threshold: 60 # Sometimes it is not so similar
+  identical-code:
+    config:
+      threshold: 60 # Nope, not a duplicate

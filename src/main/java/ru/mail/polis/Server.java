@@ -16,13 +16,13 @@
 
 package ru.mail.polis;
 
+import java.io.File;
+import java.io.IOException;
+
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.dao.DAOFactory;
 import ru.mail.polis.service.Service;
 import ru.mail.polis.service.ServiceFactory;
-
-import java.io.File;
-import java.io.IOException;
 
 /**
  * Starts storage and waits for shutdown.
@@ -36,7 +36,7 @@ public final class Server {
         // Not instantiable
     }
 
-    public static void main(String[] args) throws IOException {
+    public static void main(final String[] args) throws IOException {
         // Temporary storage in the file system
         final File data = Files.createTempDirectory();
 

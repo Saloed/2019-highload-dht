@@ -16,18 +16,19 @@
 
 package ru.mail.polis;
 
-import org.jetbrains.annotations.NotNull;
-import ru.mail.polis.dao.DAO;
-
 import java.nio.ByteBuffer;
 import java.util.Objects;
+
+import org.jetbrains.annotations.NotNull;
+
+import ru.mail.polis.dao.DAO;
 
 /**
  * Record from {@link DAO}.
  *
  * @author Dmitry Schitinin
  */
-public class Record implements Comparable<Record> {
+public final class Record implements Comparable<Record> {
     private final ByteBuffer key;
     private final ByteBuffer value;
 

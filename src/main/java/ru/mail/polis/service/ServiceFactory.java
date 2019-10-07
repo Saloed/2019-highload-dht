@@ -29,7 +29,7 @@ import ru.mail.polis.service.saloed.ServiceImpl;
  * @author Vadim Tsesko
  */
 public final class ServiceFactory {
-    private static final long MAX_HEAP = 128 * 1024 * 1024;
+    private static final long MAX_HEAP = 256 * 1024 * 1024;
 
     private ServiceFactory() {
         // Not supposed to be instantiated

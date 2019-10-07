@@ -16,8 +16,6 @@
 
 package ru.mail.polis;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -25,6 +23,8 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Utility methods for handling files.
@@ -38,6 +38,9 @@ public final class Files {
         // Don't instantiate
     }
 
+    /**
+     * Provides temporary directory for testing purposes.
+     */
     public static File createTempDirectory() throws IOException {
         final File data = java.nio.file.Files.createTempDirectory(TEMP_PREFIX).toFile();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -52,6 +55,9 @@ public final class Files {
         return data;
     }
 
+    /**
+     * Remove entire directory with subdirectories.
+     */
     public static void recursiveDelete(@NotNull final File path) throws IOException {
         java.nio.file.Files.walkFileTree(
                 path.toPath(),
@@ -75,6 +81,9 @@ public final class Files {
                 });
     }
 
+    /**
+     * Calculates directory size in bytes.
+     */
     public static long directorySize(@NotNull final File path) throws IOException {
         final AtomicLong result = new AtomicLong(0L);
         java.nio.file.Files.walkFileTree(

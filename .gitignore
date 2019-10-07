@@ -11,6 +11,8 @@
 !build.gradle.kts
 !.travis.yml
 !settings.gradle
-!gradle/wrapper/*
+!checkstyle.xml
+!.codeclimate.yml
+
 # ...even if they are in subdirectories
 !*/
