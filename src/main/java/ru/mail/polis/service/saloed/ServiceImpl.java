@@ -1,8 +1,16 @@
 package ru.mail.polis.service.saloed;
 
-import one.nio.http.*;
-import one.nio.server.AcceptorConfig;
 import org.jetbrains.annotations.NotNull;
+
+import one.nio.http.HttpServer;
+import one.nio.http.HttpServerConfig;
+import one.nio.http.HttpSession;
+import one.nio.http.Param;
+import one.nio.http.Path;
+import one.nio.http.Request;
+import one.nio.http.Response;
+import one.nio.server.AcceptorConfig;
+
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.service.Service;
@@ -20,6 +28,14 @@ public final class ServiceImpl extends HttpServer implements Service {
         this.dao = dao;
     }
 
+    /**
+     * Create service for specified port and DAO
+     *
+     * @param port -- port for incoming connections
+     * @param dao  -- data access object
+     * @return created service
+     * @throws IOException
+     */
     public static Service create(final int port, @NotNull final DAO dao) throws IOException {
         final var acceptor = new AcceptorConfig();
         final var config = new HttpServerConfig();
@@ -28,11 +44,23 @@ public final class ServiceImpl extends HttpServer implements Service {
         return new ServiceImpl(config, dao);
     }
 
+    /**
+     * Check status of this node
+     *
+     * @return status of this node
+     */
     @Path("/v0/status")
     public Response status() {
         return Response.ok("OK");
     }
 
+    /**
+     * Provide access to entities
+     *
+     * @param id      -- key of entity
+     * @param request -- HTTP request
+     * @return result or error response
+     */
     @Path("/v0/entity")
     public Response entity(
             @Param("id") final String id,
