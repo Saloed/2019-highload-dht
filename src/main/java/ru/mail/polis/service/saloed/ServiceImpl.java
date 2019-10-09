@@ -29,12 +29,12 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     /**
-     * Create service for specified port and DAO
+     * Create service for specified port and DAO.
      *
      * @param port -- port for incoming connections
      * @param dao  -- data access object
      * @return created service
-     * @throws IOException
+     * @throws IOException if something went wrong during server startup process
      */
     public static Service create(final int port, @NotNull final DAO dao) throws IOException {
         final var acceptor = new AcceptorConfig();
@@ -45,7 +45,7 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     /**
-     * Check status of this node
+     * Check status of this node.
      *
      * @return status of this node
      */
@@ -55,7 +55,7 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     /**
-     * Provide access to entities
+     * Provide access to entities.
      *
      * @param id      -- key of entity
      * @param request -- HTTP request
@@ -82,7 +82,7 @@ public final class ServiceImpl extends HttpServer implements Service {
                 default:
                     return new Response(Response.METHOD_NOT_ALLOWED, Response.EMPTY);
             }
-        } catch (Exception ex) {
+        } catch (IOException ex) {
             return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
         }
     }

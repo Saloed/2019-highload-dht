@@ -23,7 +23,7 @@ public class RocksDAOImpl implements DAO {
         this.db = db;
     }
 
-    static DAO create(File data) throws IOException {
+    static DAO create(@NotNull final File data) throws IOException {
         RocksDB.loadLibrary();
         try {
             final var options = new Options()
@@ -38,7 +38,7 @@ public class RocksDAOImpl implements DAO {
 
     @NotNull
     @Override
-    public Iterator<Record> iterator(@NotNull ByteBuffer from) throws IOException {
+    public Iterator<Record> iterator(@NotNull final ByteBuffer from) throws IOException {
         final var fromByteArray = ByteBufferUtils.toArrayShifted(from);
         final var iterator = db.newIterator();
         iterator.seek(fromByteArray);
@@ -47,7 +47,7 @@ public class RocksDAOImpl implements DAO {
 
     @NotNull
     @Override
-    public ByteBuffer get(@NotNull ByteBuffer key) throws IOException, NoSuchElementException {
+    public ByteBuffer get(@NotNull final ByteBuffer key) throws IOException, NoSuchElementException {
         final var keyByteArray = ByteBufferUtils.toArrayShifted(key);
         try {
             final var valueByteArray = db.get(keyByteArray);
@@ -61,7 +61,7 @@ public class RocksDAOImpl implements DAO {
     }
 
     @Override
-    public void upsert(@NotNull ByteBuffer key, @NotNull ByteBuffer value) throws IOException {
+    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) throws IOException {
         final var keyByteArray = ByteBufferUtils.toArrayShifted(key);
         final var valueByteArray = ByteBufferUtils.toArray(value);
         try {
@@ -72,7 +72,7 @@ public class RocksDAOImpl implements DAO {
     }
 
     @Override
-    public void remove(@NotNull ByteBuffer key) throws IOException {
+    public void remove(@NotNull final ByteBuffer key) throws IOException {
         final var keyByteArray = ByteBufferUtils.toArrayShifted(key);
         try {
             db.delete(keyByteArray);

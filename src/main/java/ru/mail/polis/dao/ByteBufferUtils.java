@@ -7,8 +7,10 @@ import java.util.Arrays;
 
 public final class ByteBufferUtils {
 
+    private ByteBufferUtils(){}
+
     /**
-     * Retrieve array from a {@link java.nio.ByteBuffer}
+     * Retrieve array from a {@link java.nio.ByteBuffer}.
      *
      * @param buffer -- byte buffer to extract from
      * @return array
@@ -22,7 +24,7 @@ public final class ByteBufferUtils {
 
 
     /**
-     * Wraps array into {@link java.nio.ByteBuffer}
+     * Wraps array into {@link java.nio.ByteBuffer}.
      *
      * @param array -- byte array to wrap
      * @return ByteBuffer
@@ -32,8 +34,8 @@ public final class ByteBufferUtils {
     }
 
     /**
-     * Retrieve array from a {@link java.nio.ByteBuffer} and shift all bytes by {@link Byte#MIN_VALUE}
-     * This hack fix the issue with {@link org.rocksdb.BuiltinComparator#BYTEWISE_COMPARATOR}
+     * Retrieve array from a {@link java.nio.ByteBuffer} and shift all bytes by {@link Byte#MIN_VALUE}.
+     * This hack fix the issue with {@link org.rocksdb.BuiltinComparator#BYTEWISE_COMPARATOR}.
      * https://github.com/facebook/rocksdb/issues/5891
      *
      * @param buffer -- byte buffer to extract from
@@ -51,8 +53,8 @@ public final class ByteBufferUtils {
     }
 
     /**
-     * Wrap byte array into {@link java.nio.ByteBuffer}
-     * See {@link ByteBufferUtils#toArrayShifted} for details about shift
+     * Wrap byte array into {@link java.nio.ByteBuffer}.
+     * See {@link ByteBufferUtils#toArrayShifted} for details about shift.
      *
      * @param array -- byte array to wrap
      * @return ByteBuffer with all bytes shifted back to normal values
