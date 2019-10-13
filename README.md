@@ -30,12 +30,12 @@ $ gradle run
 
 **ВНИМАНИЕ!** При запуске тестов или сервера в IDE необходимо передавать Java опцию `-Xmx128m`. 
 
-В своём Java package `ru.mail.polis.service.<username>` реализуйте интерфейс [`Service`](src/main/java/ru/mail/polis/dao/Service.java) и поддержите следующий HTTP REST API протокол:
+В своём Java package `ru.mail.polis.service.<username>` реализуйте интерфейс [`Service`](src/main/java/ru/mail/polis/service/Service.java) и поддержите следующий HTTP REST API протокол:
 * HTTP `GET /v0/entity?id=<ID>` -- получить данные по ключу `<ID>`. Возвращает `200 OK` и данные или `404 Not Found`.
 * HTTP `PUT /v0/entity?id=<ID>` -- создать/перезаписать (upsert) данные по ключу `<ID>`. Возвращает `201 Created`.
 * HTTP `DELETE /v0/entity?id=<ID>` -- удалить данные по ключу `<ID>`. Возвращает `202 Accepted`.
 
-Возвращайте реализацию интерфейса в [`ServiceFactory`](src/main/java/ru/mail/polis/dao/ServiceFactory.java).
+Возвращайте реализацию интерфейса в [`ServiceFactory`](src/main/java/ru/mail/polis/service/ServiceFactory.java).
 
 Реализацию `DAO` берём из весеннего курса `2019-db-lsm`, либо запиливаем [adapter](https://en.wikipedia.org/wiki/Adapter_pattern) к уже готовой реализации LSM с биндингами на Java (например, RocksDB, LevelDB или любой другой).
 
@@ -51,7 +51,6 @@ $ gradle run
 Когда всё будет готово, присылайте pull request со своей реализацией и оптимизациями на review.
 Не забывайте **отвечать на комментарии в PR** (в том числе автоматизированные) и **исправлять замечания**!
 
-
 ## Этап 2. Многопоточность (deadline 2019-10-11)
 
 Обеспечьте потокобезопасность реализации `DAO` с помощью `synchronized`, а лучше -- с использованием примитивов `java.util.concurrent.*`.
@@ -65,3 +64,22 @@ $ gradle run
 
 ### Report
 Когда всё будет готово, присылайте pull request со своей реализацией и оптимизациями на review.
+
+## Этап 3. Асинхронный сервер (deadline 2019-10-19)
+
+Реализуйте асинхронный HTTP сервер на основе [one-nio](https://github.com/odnoklassniki/one-nio).
+
+Проведите нагрузочное тестирование с помощью [wrk](https://github.com/giltene/wrk2) в **несколько соединений** с разными видами запросов.
+
+Попрофилируйте приложение (CPU, alloc и lock) под нагрузкой с помощью [async-profiler](https://github.com/jvm-profiling-tools/async-profiler) и проанализируйте результаты.
+
+Реализуйте получение **диапазона данных** с помощью HTTP `GET /v0/entities?start=<ID>[&end=<ID>]`, который возвращает:
+  * Статус код `200 OK`
+  * Возможно пустой **отсортированный** (по ключу) набор **ключей** и **значений** в диапазоне ключей от **обязательного** `start` (включая) до **опционального** `end` (не включая)
+  * Использует [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding)
+  * Чанки в формате `<key>\n<value>`
+
+Диапазон должен отдаваться в **потоковом режиме** без формирования всего ответа в памяти.
+
+### Report
+Когда всё будет готово, присылайте pull request с изменениями и результатами нагрузочного тестирования и профилирования.

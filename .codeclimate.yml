@@ -25,6 +25,8 @@ plugins:
     checks:
       AvoidThrowingRawExceptionTypes:
         enabled: false 
+      DataClass:
+        enabled: false
   sonar-java:
     enabled: true
     config:
@@ -45,3 +47,6 @@ checks:
   identical-code:
     config:
       threshold: 60 # Nope, not a duplicate
+  return-statements:
+    config:
+      threshold: 10 # Have pattern-matching-like code
