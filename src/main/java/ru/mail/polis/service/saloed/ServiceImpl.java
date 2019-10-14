@@ -1,9 +1,5 @@
 package ru.mail.polis.service.saloed;
 
-import one.nio.net.Socket;
-import one.nio.server.RejectedSessionException;
-import org.jetbrains.annotations.NotNull;
-
 import one.nio.http.HttpServer;
 import one.nio.http.HttpServerConfig;
 import one.nio.http.HttpSession;
@@ -11,9 +7,15 @@ import one.nio.http.Param;
 import one.nio.http.Path;
 import one.nio.http.Request;
 import one.nio.http.Response;
+import one.nio.net.Socket;
 import one.nio.server.AcceptorConfig;
+import one.nio.server.RejectedSessionException;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import org.slf4j.LoggerFactory;
+
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.service.Service;
@@ -22,6 +24,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.NoSuchElementException;
+
 
 public final class ServiceImpl extends HttpServer implements Service {
     private final DAO dao;
@@ -44,6 +47,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         final var config = new HttpServerConfig();
         acceptor.port = port;
         config.acceptors = new AcceptorConfig[]{acceptor};
+        config.maxWorkers = Runtime.getRuntime().availableProcessors();
         return new ServiceImpl(config, dao);
     }
 
@@ -62,32 +66,38 @@ public final class ServiceImpl extends HttpServer implements Service {
      *
      * @param id      -- key of entity
      * @param request -- HTTP request
-     * @return result or error response
      */
     @Path("/v0/entity")
-    public Response entity(
+    public void entity(
             @Param("id") final String id,
-            @NotNull final Request request
+            @NotNull final Request request,
+            @NotNull final HttpSession session
     ) {
-        try {
-            if (id == null || id.isEmpty()) {
-                return new Response(Response.BAD_REQUEST, "Id is required".getBytes(StandardCharsets.UTF_8));
-            }
-            final var method = request.getMethod();
-            final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
-            switch (method) {
-                case Request.METHOD_GET:
-                    return getEntity(key);
-                case Request.METHOD_PUT:
-                    return putEntity(key, request);
-                case Request.METHOD_DELETE:
-                    return deleteEntity(key);
-                default:
-                    return new Response(Response.METHOD_NOT_ALLOWED, Response.EMPTY);
-            }
-        } catch (IOException ex) {
-            return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+        if (id == null || id.isEmpty()) {
+            response(session, Response.BAD_REQUEST, "Id is required");
+            return;
         }
+        final var method = request.getMethod();
+        final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
+        asyncExecute(() -> {
+            try {
+                switch (method) {
+                    case Request.METHOD_GET:
+                        getEntity(key, session);
+                        return;
+                    case Request.METHOD_PUT:
+                        putEntity(key, request, session);
+                        return;
+                    case Request.METHOD_DELETE:
+                        deleteEntity(key, session);
+                        return;
+                    default:
+                        response(session, Response.METHOD_NOT_ALLOWED);
+                }
+            } catch (IOException ex) {
+                response(session, Response.INTERNAL_ERROR);
+            }
+        });
     }
 
     /**
@@ -102,10 +112,9 @@ public final class ServiceImpl extends HttpServer implements Service {
             @Param("start") final String start,
             @Param("end") final String end,
             @NotNull final HttpSession session
-    ) throws IOException {
+    ) {
         if (start == null || start.isEmpty()) {
-            final var errorMessage = "Start parameter is required".getBytes(StandardCharsets.UTF_8);
-            session.sendResponse(new Response(Response.BAD_REQUEST, errorMessage));
+            response(session, Response.BAD_REQUEST, "Start parameter is required");
             return;
         }
         final var startBytes = ByteBuffer.wrap(start.getBytes(StandardCharsets.UTF_8));
@@ -113,13 +122,15 @@ public final class ServiceImpl extends HttpServer implements Service {
         if (end != null && !end.isEmpty()) {
             endBytes = ByteBuffer.wrap(end.getBytes(StandardCharsets.UTF_8));
         }
+        final var finalEndBytes = endBytes;
         final var streamSession = (RecordStreamHttpSession) session;
-        try {
-            retrieveEntities(startBytes, endBytes, streamSession);
-        } catch (IOException exception) {
-            session.sendResponse(new Response(Response.INTERNAL_ERROR, Response.EMPTY));
-        }
-
+        asyncExecute(() -> {
+            try {
+                retrieveEntities(startBytes, finalEndBytes, streamSession);
+            } catch (IOException exception) {
+                response(session, Response.INTERNAL_ERROR);
+            }
+        });
     }
 
     private void retrieveEntities(
@@ -131,25 +142,25 @@ public final class ServiceImpl extends HttpServer implements Service {
         streamSession.stream(rangeIterator);
     }
 
-    private Response getEntity(final ByteBuffer key) throws IOException {
+    private void getEntity(final ByteBuffer key, final HttpSession session) throws IOException {
         try {
             final var value = dao.get(key).duplicate();
             final var valueArray = ByteBufferUtils.toArray(value);
-            return Response.ok(valueArray);
+            response(session, Response.OK, valueArray);
         } catch (NoSuchElementException ex) {
-            return new Response(Response.NOT_FOUND, Response.EMPTY);
+            response(session, Response.NOT_FOUND);
         }
     }
 
-    private Response putEntity(final ByteBuffer key, final Request request) throws IOException {
+    private void putEntity(final ByteBuffer key, final Request request, final HttpSession session) throws IOException {
         final var value = ByteBuffer.wrap(request.getBody());
         dao.upsert(key, value);
-        return new Response(Response.CREATED, Response.EMPTY);
+        response(session, Response.CREATED);
     }
 
-    private Response deleteEntity(final ByteBuffer key) throws IOException {
+    private void deleteEntity(final ByteBuffer key, final HttpSession session) throws IOException {
         dao.remove(key);
-        return new Response(Response.ACCEPTED, Response.EMPTY);
+        response(session, Response.ACCEPTED);
     }
 
     @Override
@@ -158,8 +169,27 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     @Override
-    public void handleDefault(final Request request, final HttpSession session) throws IOException {
-        final var response = new Response(Response.BAD_REQUEST, Response.EMPTY);
-        session.sendResponse(response);
+    public void handleDefault(final Request request, final HttpSession session) {
+        response(session, Response.BAD_REQUEST);
     }
+
+    private void response(final HttpSession session, final String resultCode) {
+        response(session, resultCode, Response.EMPTY);
+    }
+
+    private void response(final HttpSession session, final String resultCode, final String message) {
+        final var messageBytes = message.getBytes(StandardCharsets.UTF_8);
+        response(session, resultCode, messageBytes);
+    }
+
+    private void response(final HttpSession session, final String resultCode, final byte[] body) {
+        final var response = new Response(resultCode, body);
+        try {
+            session.sendResponse(response);
+        } catch (IOException exception) {
+            final var log = LoggerFactory.getLogger(this.getClass());
+            log.error("Error during send response", exception);
+        }
+    }
+
 }
