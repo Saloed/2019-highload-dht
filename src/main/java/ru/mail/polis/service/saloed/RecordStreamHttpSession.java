@@ -1,16 +1,20 @@
 package ru.mail.polis.service.saloed;
 
-import one.nio.http.HttpServer;
-import one.nio.http.HttpSession;
-import one.nio.http.Response;
-import one.nio.net.Socket;
-import ru.mail.polis.Record;
-import ru.mail.polis.dao.ByteBufferUtils;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
+
+import one.nio.http.HttpServer;
+import one.nio.http.HttpSession;
+import one.nio.http.Response;
+import one.nio.net.Socket;
+
+import org.slf4j.LoggerFactory;
+
+import ru.mail.polis.Record;
+import ru.mail.polis.dao.ByteBufferUtils;
+
 
 final class RecordStreamHttpSession extends HttpSession {
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.UTF_8);
@@ -88,6 +92,15 @@ final class RecordStreamHttpSession extends HttpSession {
         }
         if (!recordIterator.hasNext()) {
             handleStreamEnding();
+            if (recordIterator instanceof AutoCloseable) {
+                try {
+                    ((AutoCloseable) recordIterator).close();
+                } catch (Exception exception) {
+                    final var log = LoggerFactory.getLogger(this.getClass());
+                    log.error("Exception while close iterator", exception);
+                }
+            }
+            recordIterator = null;
         }
     }
 
