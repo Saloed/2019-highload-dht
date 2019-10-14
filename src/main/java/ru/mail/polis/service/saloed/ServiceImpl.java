@@ -11,10 +11,11 @@ import one.nio.net.Socket;
 import one.nio.server.AcceptorConfig;
 import one.nio.server.RejectedSessionException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import org.slf4j.LoggerFactory;
 
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAO;
@@ -27,6 +28,8 @@ import java.util.NoSuchElementException;
 
 
 public final class ServiceImpl extends HttpServer implements Service {
+    private static final Log log = LogFactory.getLog(ServiceImpl.class);
+
     private final DAO dao;
 
     private ServiceImpl(final HttpServerConfig config, @NotNull final DAO dao) throws IOException {
@@ -187,7 +190,6 @@ public final class ServiceImpl extends HttpServer implements Service {
         try {
             session.sendResponse(response);
         } catch (IOException exception) {
-            final var log = LoggerFactory.getLogger(this.getClass());
             log.error("Error during send response", exception);
         }
     }

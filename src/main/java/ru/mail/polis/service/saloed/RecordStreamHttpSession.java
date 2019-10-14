@@ -1,22 +1,25 @@
 package ru.mail.polis.service.saloed;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.Iterator;
-
 import one.nio.http.HttpServer;
 import one.nio.http.HttpSession;
 import one.nio.http.Response;
 import one.nio.net.Socket;
 
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.ByteBufferUtils;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
+
 
 final class RecordStreamHttpSession extends HttpSession {
+    private static final Log log = LogFactory.getLog(RecordStreamHttpSession.class);
+
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.UTF_8);
     private static final byte[] DELIMITER = "\n".getBytes(StandardCharsets.UTF_8);
     private static final byte[] EMPTY = "0\r\n\r\n".getBytes(StandardCharsets.UTF_8);
@@ -35,9 +38,13 @@ final class RecordStreamHttpSession extends HttpSession {
      */
     void stream(final Iterator<Record> recordIterator) throws IOException {
         this.recordIterator = recordIterator;
-
+        if (handling == null) {
+            throw new IOException("Out of order response");
+        }
         final var response = new Response(Response.OK);
+        response.addHeader(keepAlive() ? "Connection: Keep-Alive" : "Connection: close");
         response.addHeader("Transfer-Encoding: chunked");
+
         writeResponse(response, false);
 
         next();
@@ -69,10 +76,18 @@ final class RecordStreamHttpSession extends HttpSession {
         write(chunk, 0, chunk.length);
     }
 
+    private boolean keepAlive() {
+        final var connection = handling.getHeader("Connection: ");
+        return handling.isHttp11()
+                ? !"close".equalsIgnoreCase(connection)
+                : "Keep-Alive".equalsIgnoreCase(connection);
+    }
+
     private void handleStreamEnding() throws IOException {
         write(EMPTY, 0, EMPTY.length);
         server.incRequestsProcessed();
 
+        if (!keepAlive()) scheduleClose();
         if ((handling = pipeline.pollFirst()) != null) {
             if (handling == FIN) {
                 scheduleClose();
@@ -96,7 +111,6 @@ final class RecordStreamHttpSession extends HttpSession {
                 try {
                     ((AutoCloseable) recordIterator).close();
                 } catch (Exception exception) {
-                    final var log = LoggerFactory.getLogger(this.getClass());
                     log.error("Exception while close iterator", exception);
                 }
             }
