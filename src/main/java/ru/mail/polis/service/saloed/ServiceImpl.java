@@ -1,5 +1,7 @@
 package ru.mail.polis.service.saloed;
 
+import one.nio.net.Socket;
+import one.nio.server.RejectedSessionException;
 import org.jetbrains.annotations.NotNull;
 
 import one.nio.http.HttpServer;
@@ -11,6 +13,7 @@ import one.nio.http.Request;
 import one.nio.http.Response;
 import one.nio.server.AcceptorConfig;
 
+import org.jetbrains.annotations.Nullable;
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.service.Service;
@@ -87,6 +90,47 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
     }
 
+    /**
+     * Retrieve all entities from start to end.
+     * If end is missing -- retrieve all entities up to the end.
+     *
+     * @param start of key range (required)
+     * @param end   of key range (optional)
+     */
+    @Path("/v0/entities")
+    public void entities(
+            @Param("start") final String start,
+            @Param("end") final String end,
+            @NotNull final HttpSession session
+    ) throws IOException {
+        if (start == null || start.isEmpty()) {
+            final var errorMessage = "Start parameter is required".getBytes(StandardCharsets.UTF_8);
+            session.sendResponse(new Response(Response.BAD_REQUEST, errorMessage));
+            return;
+        }
+        final var startBytes = ByteBuffer.wrap(start.getBytes(StandardCharsets.UTF_8));
+        ByteBuffer endBytes = null;
+        if (end != null && !end.isEmpty()) {
+            endBytes = ByteBuffer.wrap(end.getBytes(StandardCharsets.UTF_8));
+        }
+        final var streamSession = (RecordStreamHttpSession) session;
+        try {
+            retrieveEntities(startBytes, endBytes, streamSession);
+        } catch (IOException exception) {
+            session.sendResponse(new Response(Response.INTERNAL_ERROR, Response.EMPTY));
+        }
+
+    }
+
+    private void retrieveEntities(
+            @NotNull final ByteBuffer start,
+            @Nullable final ByteBuffer end,
+            final RecordStreamHttpSession streamSession
+    ) throws IOException {
+        final var rangeIterator = dao.range(start, end);
+        streamSession.stream(rangeIterator);
+    }
+
     private Response getEntity(final ByteBuffer key) throws IOException {
         try {
             final var value = dao.get(key).duplicate();
@@ -108,6 +152,10 @@ public final class ServiceImpl extends HttpServer implements Service {
         return new Response(Response.ACCEPTED, Response.EMPTY);
     }
 
+    @Override
+    public HttpSession createSession(Socket socket) throws RejectedSessionException {
+        return new RecordStreamHttpSession(socket, this);
+    }
 
     @Override
     public void handleDefault(final Request request, final HttpSession session) throws IOException {
