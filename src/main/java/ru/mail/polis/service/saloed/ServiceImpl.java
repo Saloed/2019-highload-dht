@@ -87,13 +87,13 @@ public final class ServiceImpl extends HttpServer implements Service {
                 switch (method) {
                     case Request.METHOD_GET:
                         getEntity(key, session);
-                        return;
+                        break;
                     case Request.METHOD_PUT:
                         putEntity(key, request, session);
-                        return;
+                        break;
                     case Request.METHOD_DELETE:
                         deleteEntity(key, session);
-                        return;
+                        break;
                     default:
                         response(session, Response.METHOD_NOT_ALLOWED);
                 }
@@ -167,7 +167,7 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     @Override
-    public HttpSession createSession(Socket socket) throws RejectedSessionException {
+    public HttpSession createSession(final Socket socket) throws RejectedSessionException {
         return new RecordStreamHttpSession(socket, this);
     }
 

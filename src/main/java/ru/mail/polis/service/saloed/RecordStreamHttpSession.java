@@ -11,6 +11,7 @@ import org.apache.commons.logging.LogFactory;
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.ByteBufferUtils;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -24,7 +25,7 @@ final class RecordStreamHttpSession extends HttpSession {
     private static final byte[] DELIMITER = "\n".getBytes(StandardCharsets.UTF_8);
     private static final byte[] EMPTY = "0\r\n\r\n".getBytes(StandardCharsets.UTF_8);
 
-    private Iterator<Record> recordIterator = null;
+    private Iterator<Record> recordIterator;
 
     RecordStreamHttpSession(final Socket socket, final HttpServer server) {
         super(socket, server);
@@ -107,10 +108,10 @@ final class RecordStreamHttpSession extends HttpSession {
         }
         if (!recordIterator.hasNext()) {
             handleStreamEnding();
-            if (recordIterator instanceof AutoCloseable) {
+            if (recordIterator instanceof Closeable) {
                 try {
-                    ((AutoCloseable) recordIterator).close();
-                } catch (Exception exception) {
+                    ((Closeable) recordIterator).close();
+                } catch (IOException exception) {
                     log.error("Exception while close iterator", exception);
                 }
             }

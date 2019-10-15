@@ -70,14 +70,12 @@ public final class ByteBufferUtils {
 
     private static byte toUnsignedByte(final byte b) {
         final var uint = Byte.toUnsignedInt(b);
-        final var shiftedUint = uint - Byte.MIN_VALUE;
-        return (byte) shiftedUint;
+        return (byte) (uint - Byte.MIN_VALUE);
     }
 
     private static byte fromUnsignedByte(final byte b) {
         final var uint = Byte.toUnsignedInt(b);
-        final var shiftedUint = uint + Byte.MIN_VALUE;
-        return (byte) shiftedUint;
+        return (byte) (uint + Byte.MIN_VALUE);
     }
 
 }

@@ -10,6 +10,7 @@ import org.rocksdb.RocksIterator;
 
 import ru.mail.polis.Record;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -100,7 +101,7 @@ public class RocksDAOImpl implements DAO {
         }
     }
 
-    public static class RocksRecordIterator implements Iterator<Record>, AutoCloseable {
+    public static class RocksRecordIterator implements Iterator<Record>, Closeable {
 
         private final RocksIterator iterator;
 
@@ -128,7 +129,7 @@ public class RocksDAOImpl implements DAO {
         }
 
         @Override
-        public void close() throws Exception {
+        public void close() throws IOException {
             iterator.close();
         }
     }
