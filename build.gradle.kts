@@ -1,7 +1,9 @@
-// Apply the java plugin to add support for Java
+import net.ltgt.gradle.errorprone.errorprone
+
 plugins {
     java
     application
+    id("net.ltgt.errorprone") version "0.8.1"
 }
 
 java {
@@ -14,6 +16,9 @@ repositories {
 }
 
 dependencies {
+    // Checks
+    errorprone("com.google.errorprone:error_prone_core:2.3.3")
+
     // Our beloved one-nio
     compile("ru.odnoklassniki:one-nio:1.2.0")
 
@@ -52,4 +57,16 @@ application {
 
     // And limit Xmx
     applicationDefaultJvmArgs = listOf("-Xmx256m")
+}
+
+// Fail on warnings
+tasks.withType<JavaCompile> {
+    val compilerArgs = options.compilerArgs
+    compilerArgs.add("-Werror")
+    compilerArgs.add("-Xlint:all")
+}
+
+// Error prone options
+tasks.named<JavaCompile>("compileTestJava") {
+    options.errorprone.isEnabled.set(false)
 }
