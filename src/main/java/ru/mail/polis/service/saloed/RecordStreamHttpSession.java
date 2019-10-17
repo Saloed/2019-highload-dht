@@ -17,8 +17,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 
-
 final class RecordStreamHttpSession extends HttpSession {
+
     private static final Log log = LogFactory.getLog(RecordStreamHttpSession.class);
 
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.UTF_8);
@@ -63,7 +63,8 @@ final class RecordStreamHttpSession extends HttpSession {
 
         final var payloadLength = key.length + DELIMITER.length + value.length;
         final var payloadLengthHex = Integer.toHexString(payloadLength);
-        final var chunkLength = payloadLengthHex.length() + CRLF.length + payloadLength + CRLF.length;
+        final var chunkLength =
+            payloadLengthHex.length() + CRLF.length + payloadLength + CRLF.length;
 
         final var chunk = new byte[chunkLength];
         final var chunkBuffer = ByteBuffer.wrap(chunk);
@@ -80,15 +81,17 @@ final class RecordStreamHttpSession extends HttpSession {
     private boolean keepAlive() {
         final var connection = handling.getHeader("Connection: ");
         return handling.isHttp11()
-                ? !"close".equalsIgnoreCase(connection)
-                : "Keep-Alive".equalsIgnoreCase(connection);
+            ? !"close".equalsIgnoreCase(connection)
+            : "Keep-Alive".equalsIgnoreCase(connection);
     }
 
     private void handleStreamEnding() throws IOException {
         write(EMPTY, 0, EMPTY.length);
         server.incRequestsProcessed();
 
-        if (!keepAlive()) scheduleClose();
+        if (!keepAlive()) {
+            scheduleClose();
+        }
         if ((handling = pipeline.pollFirst()) != null) {
             if (handling == FIN) {
                 scheduleClose();

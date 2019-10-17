@@ -18,6 +18,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 public class RocksDAOImpl implements DAO {
+
     private final RocksDB db;
 
     private RocksDAOImpl(final RocksDB db) {
@@ -28,8 +29,8 @@ public class RocksDAOImpl implements DAO {
         RocksDB.loadLibrary();
         try {
             final var options = new Options()
-                    .setCreateIfMissing(true)
-                    .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
+                .setCreateIfMissing(true)
+                .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
             final var db = RocksDB.open(options, data.getAbsolutePath());
             return new RocksDAOImpl(db);
         } catch (RocksDBException exception) {
@@ -48,7 +49,8 @@ public class RocksDAOImpl implements DAO {
 
     @NotNull
     @Override
-    public ByteBuffer get(@NotNull final ByteBuffer key) throws IOException, NoSuchElementException {
+    public ByteBuffer get(@NotNull final ByteBuffer key)
+        throws IOException, NoSuchElementException {
         final var keyByteArray = ByteBufferUtils.toArrayShifted(key);
         try {
             final var valueByteArray = db.get(keyByteArray);
@@ -62,7 +64,8 @@ public class RocksDAOImpl implements DAO {
     }
 
     @Override
-    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) throws IOException {
+    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value)
+        throws IOException {
         final var keyByteArray = ByteBufferUtils.toArrayShifted(key);
         final var valueByteArray = ByteBufferUtils.toArray(value);
         try {

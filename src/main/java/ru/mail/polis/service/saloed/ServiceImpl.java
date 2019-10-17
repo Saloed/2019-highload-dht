@@ -26,8 +26,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.NoSuchElementException;
 
-
 public final class ServiceImpl extends HttpServer implements Service {
+
     private static final Log log = LogFactory.getLog(ServiceImpl.class);
 
     private final DAO dao;
@@ -40,8 +40,8 @@ public final class ServiceImpl extends HttpServer implements Service {
     /**
      * Create service for specified port and DAO.
      *
-     * @param port -- port for incoming connections
-     * @param dao  -- data access object
+     * @param port port for incoming connections
+     * @param dao  data access object
      * @return created service
      * @throws IOException if something went wrong during server startup process
      */
@@ -67,15 +67,14 @@ public final class ServiceImpl extends HttpServer implements Service {
     /**
      * Provide access to entities.
      *
-     * @param id      -- key of entity
-     * @param request -- HTTP request
+     * @param id      key of entity
+     * @param request HTTP request
      */
     @Path("/v0/entity")
     public void entity(
-            @Param("id") final String id,
-            @NotNull final Request request,
-            @NotNull final HttpSession session
-    ) {
+        @Param("id") final String id,
+        @NotNull final Request request,
+        @NotNull final HttpSession session) {
         if (id == null || id.isEmpty()) {
             response(session, Response.BAD_REQUEST, "Id is required");
             return;
@@ -92,18 +91,17 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     /**
-     * Retrieve all entities from start to end.
-     * If end is missing -- retrieve all entities up to the end.
+     * Retrieve all entities from start to end. If end is missing -- retrieve all entities up to the
+     * end.
      *
      * @param start of key range (required)
      * @param end   of key range (optional)
      */
     @Path("/v0/entities")
     public void entities(
-            @Param("start") final String start,
-            @Param("end") final String end,
-            @NotNull final HttpSession session
-    ) {
+        @Param("start") final String start,
+        @Param("end") final String end,
+        @NotNull final HttpSession session) {
         if (start == null || start.isEmpty()) {
             response(session, Response.BAD_REQUEST, "Start parameter is required");
             return;
@@ -125,11 +123,10 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     private void dispatchEntityRequest(
-            final Request request,
-            final HttpSession session,
-            final ByteBuffer key,
-            final int method
-    ) throws IOException {
+        final Request request,
+        final HttpSession session,
+        final ByteBuffer key,
+        final int method) throws IOException {
         switch (method) {
             case Request.METHOD_GET: {
                 getEntity(key, session);
@@ -151,10 +148,9 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     private void retrieveEntities(
-            @NotNull final ByteBuffer start,
-            @Nullable final ByteBuffer end,
-            final RecordStreamHttpSession streamSession
-    ) throws IOException {
+        @NotNull final ByteBuffer start,
+        @Nullable final ByteBuffer end,
+        final RecordStreamHttpSession streamSession) throws IOException {
         final var rangeIterator = dao.range(start, end);
         streamSession.stream(rangeIterator);
     }
@@ -169,7 +165,8 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
     }
 
-    private void putEntity(final ByteBuffer key, final Request request, final HttpSession session) throws IOException {
+    private void putEntity(final ByteBuffer key, final Request request, final HttpSession session)
+        throws IOException {
         final var value = ByteBuffer.wrap(request.getBody());
         dao.upsert(key, value);
         response(session, Response.CREATED);
@@ -194,7 +191,8 @@ public final class ServiceImpl extends HttpServer implements Service {
         response(session, resultCode, Response.EMPTY);
     }
 
-    private void response(final HttpSession session, final String resultCode, final String message) {
+    private void response(final HttpSession session, final String resultCode,
+        final String message) {
         final var messageBytes = message.getBytes(StandardCharsets.UTF_8);
         response(session, resultCode, messageBytes);
     }
