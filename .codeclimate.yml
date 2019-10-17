@@ -23,6 +23,8 @@ plugins:
         - "java-unnecessary"
         - "java-unusedcode"
     checks:
+      AvoidSynchronizedAtMethodLevel:
+        enabled: false
       AvoidThrowingRawExceptionTypes:
         enabled: false 
       DataClass:
