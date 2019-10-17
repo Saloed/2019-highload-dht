@@ -84,19 +84,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
         asyncExecute(() -> {
             try {
-                switch (method) {
-                    case Request.METHOD_GET:
-                        getEntity(key, session);
-                        break;
-                    case Request.METHOD_PUT:
-                        putEntity(key, request, session);
-                        break;
-                    case Request.METHOD_DELETE:
-                        deleteEntity(key, session);
-                        break;
-                    default:
-                        response(session, Response.METHOD_NOT_ALLOWED);
-                }
+                dispatchEntityRequest(request, session, key, method);
             } catch (IOException ex) {
                 response(session, Response.INTERNAL_ERROR);
             }
@@ -134,6 +122,32 @@ public final class ServiceImpl extends HttpServer implements Service {
                 response(session, Response.INTERNAL_ERROR);
             }
         });
+    }
+
+    private void dispatchEntityRequest(
+            final Request request,
+            final HttpSession session,
+            final ByteBuffer key,
+            final int method
+    ) throws IOException {
+        switch (method) {
+            case Request.METHOD_GET: {
+                getEntity(key, session);
+                break;
+            }
+            case Request.METHOD_PUT: {
+                putEntity(key, request, session);
+                break;
+            }
+            case Request.METHOD_DELETE: {
+                deleteEntity(key, session);
+                break;
+            }
+            default: {
+                response(session, Response.METHOD_NOT_ALLOWED);
+                break;
+            }
+        }
     }
 
     private void retrieveEntities(
