@@ -52,3 +52,5 @@ checks:
   return-statements:
     config:
       threshold: 10 # Have pattern-matching-like code
+exclude_patterns:
+- "**/*.svg"
