@@ -34,13 +34,13 @@ public final class DAOFactory {
     }
 
     /**
-     * Construct a {@link DAO} instance.
+     * Construct a {@link DAOWithTimestamp} instance.
      *
      * @param data local disk folder to persist the data to
      * @return a storage instance
      */
     @NotNull
-    public static DAO create(@NotNull final File data) throws IOException {
+    public static DAOWithTimestamp create(@NotNull final File data) throws IOException {
         if (Runtime.getRuntime().maxMemory() > MAX_HEAP) {
             throw new IllegalStateException("The heap is too big. Consider setting Xmx.");
         }

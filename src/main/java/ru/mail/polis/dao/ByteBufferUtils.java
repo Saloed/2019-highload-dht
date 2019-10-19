@@ -46,9 +46,7 @@ public final class ByteBufferUtils {
         final var bufferCopy = buffer.duplicate();
         final var array = new byte[bufferCopy.remaining()];
         bufferCopy.get(array);
-        for (int i = 0; i < array.length; i++) {
-            array[i] = toUnsignedByte(array[i]);
-        }
+        shiftArrayInplace(array, Byte.MIN_VALUE);
         return array;
     }
 
@@ -61,19 +59,38 @@ public final class ByteBufferUtils {
      */
     public static ByteBuffer fromArrayShifted(@NotNull final byte[] array) {
         final var arrayCopy = Arrays.copyOf(array, array.length);
-        for (int i = 0; i < arrayCopy.length; i++) {
-            arrayCopy[i] = fromUnsignedByte(arrayCopy[i]);
-        }
+        shiftArrayInplace(arrayCopy, -Byte.MIN_VALUE);
         return ByteBuffer.wrap(arrayCopy);
     }
 
-    private static byte toUnsignedByte(final byte b) {
-        final var uint = Byte.toUnsignedInt(b);
-        return (byte) (uint - Byte.MIN_VALUE);
+    /**
+     * Copy and shifts array by {@link Byte#MIN_VALUE}
+     *
+     * @param array to shift
+     * @return copy of array shifted
+     */
+    public static byte[] copyArrayShifted(@NotNull final byte[] array) {
+        final var arrayCopy = Arrays.copyOf(array, array.length);
+        shiftArrayInplace(arrayCopy, Byte.MIN_VALUE);
+        return arrayCopy;
     }
 
-    private static byte fromUnsignedByte(final byte b) {
-        final var uint = Byte.toUnsignedInt(b);
-        return (byte) (uint + Byte.MIN_VALUE);
+    /**
+     * Copy and shifts array by {@link Byte#MIN_VALUE} back
+     *
+     * @param array to shift
+     * @return copy of array shifted
+     */
+    public static byte[] copyArrayShiftedBack(@NotNull final byte[] array) {
+        final var arrayCopy = Arrays.copyOf(array, array.length);
+        shiftArrayInplace(arrayCopy, -Byte.MIN_VALUE);
+        return arrayCopy;
+    }
+
+    private static void shiftArrayInplace(final byte[] array, final int shift) {
+        for (int i = 0; i < array.length; i++) {
+            final var uint = Byte.toUnsignedInt(array[i]);
+            array[i] = (byte) (uint - shift);
+        }
     }
 }

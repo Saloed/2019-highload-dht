@@ -21,6 +21,7 @@ import java.io.IOException;
 import org.jetbrains.annotations.NotNull;
 
 import ru.mail.polis.dao.DAO;
+import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.service.saloed.ServiceImpl;
 
 /**
@@ -38,8 +39,8 @@ public final class ServiceFactory {
     /**
      * Construct a storage instance.
      *
-     * @param port     port to bind HTTP server to
-     * @param dao      DAO to store the data
+     * @param port port to bind HTTP server to
+     * @param dao  DAO to store the data
      * @return a storage instance
      */
     @NotNull
@@ -54,6 +55,10 @@ public final class ServiceFactory {
             throw new IllegalArgumentException("Port out of range");
         }
 
-       return ServiceImpl.create(port, dao);
+        if (!(dao instanceof DAOWithTimestamp)) {
+            throw new IllegalArgumentException("DAOWithTimestamp expected");
+        }
+
+        return ServiceImpl.create(port, (DAOWithTimestamp) dao);
     }
 }

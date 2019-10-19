@@ -19,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAO;
+import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.service.Service;
 
 import java.io.IOException;
@@ -30,9 +31,9 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private static final Log log = LogFactory.getLog(ServiceImpl.class);
 
-    private final DAO dao;
+    private final DAOWithTimestamp dao;
 
-    private ServiceImpl(final HttpServerConfig config, @NotNull final DAO dao) throws IOException {
+    private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao) throws IOException {
         super(config);
         this.dao = dao;
     }
@@ -45,7 +46,7 @@ public final class ServiceImpl extends HttpServer implements Service {
      * @return created service
      * @throws IOException if something went wrong during server startup process
      */
-    public static Service create(final int port, @NotNull final DAO dao) throws IOException {
+    public static Service create(final int port, @NotNull final DAOWithTimestamp dao) throws IOException {
         final var acceptor = new AcceptorConfig();
         final var config = new HttpServerConfig();
         acceptor.port = port;
