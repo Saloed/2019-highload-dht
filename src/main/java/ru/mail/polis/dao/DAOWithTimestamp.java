@@ -10,6 +10,5 @@ public interface DAOWithTimestamp extends DAO {
     @NotNull
     RecordWithTimestamp getRecord(@NotNull final ByteBuffer key) throws IOException, NoSuchElementException;
 
-    void upsertRecord(@NotNull final RecordWithTimestamp record) throws IOException;
-
+    void upsertRecord(@NotNull final ByteBuffer key, @NotNull final RecordWithTimestamp record) throws IOException;
 }

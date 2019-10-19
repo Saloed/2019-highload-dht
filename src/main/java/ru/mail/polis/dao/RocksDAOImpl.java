@@ -10,6 +10,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
@@ -47,24 +48,23 @@ public class RocksDAOImpl implements DAOWithTimestamp {
     @Override
     public ByteBuffer get(@NotNull final ByteBuffer key)
             throws IOException, NoSuchElementException {
-        final var record = getRecord(key).withoutTimestamp();
-        if (record == null) {
+        final var record = getRecord(key);
+        if (record.isEmpty()) {
             throw new NoSuchElementExceptionLite("Key is not present: " + key.toString());
         }
         return record.getValue();
     }
 
     @Override
-    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value)
-            throws IOException {
-        final var record = RecordWithTimestamp.create(key, value);
-        upsertRecord(record);
+    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) throws IOException {
+        final var record = RecordWithTimestamp.fromValue(value, System.currentTimeMillis());
+        upsertRecord(key, record);
     }
 
     @Override
     public void remove(@NotNull final ByteBuffer key) throws IOException {
-        final var record = RecordWithTimestamp.empty(key);
-        upsertRecord(record);
+        final var record = RecordWithTimestamp.empty(System.currentTimeMillis());
+        upsertRecord(key, record);
     }
 
     @Override
@@ -88,29 +88,30 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @NotNull
     @Override
-    public RecordWithTimestamp getRecord(@NotNull ByteBuffer key) throws IOException, NoSuchElementException {
-        final var keyByteArray = ByteBufferUtils.toArrayShifted(key);
+    public RecordWithTimestamp getRecord(@NotNull final ByteBuffer key) throws IOException, NoSuchElementException {
+        final var keyBytes = ByteBufferUtils.toArrayShifted(key);
         try {
-            final var valueByteArray = db.get(keyByteArray);
-            if (valueByteArray == null) {
-                throw new NoSuchElementExceptionLite("Key is not present: " + key.toString());
+            final var valueBytes = db.get(keyBytes);
+            if (valueBytes == null) {
+                throw new NoSuchElementExceptionLite("Not found: " + Arrays.toString(keyBytes));
             }
-            return RecordWithTimestamp.fromRawBytes(keyByteArray, valueByteArray);
+            return RecordWithTimestamp.fromBytes(valueBytes);
         } catch (RocksDBException exception) {
             throw new DAOException("Error while get", exception);
         }
     }
 
     @Override
-    public void upsertRecord(@NotNull RecordWithTimestamp record) throws IOException {
-        final var keyByteArray = ByteBufferUtils.copyArrayShifted(record.getKey());
-        final var valueByteArray = record.toRawBytes();
+    public void upsertRecord(@NotNull final ByteBuffer key, @NotNull final RecordWithTimestamp record) throws IOException {
+        final var keyBytes = ByteBufferUtils.toArrayShifted(key);
+        final var valueBytes = record.toRawBytes();
         try {
-            db.put(keyByteArray, valueByteArray);
+            db.put(keyBytes, valueBytes);
         } catch (RocksDBException exception) {
-            throw new DAOException("Error while upsert", exception);
+            throw new DAOException("Error while put", exception);
         }
     }
+
 
     public static class RocksRecordIterator implements Iterator<Record>, Closeable {
 
@@ -132,20 +133,17 @@ public class RocksDAOImpl implements DAOWithTimestamp {
                 throw new IllegalStateException("Iterator is exhausted");
             }
             skipEmptyRecords();
-            final var record = getRecord();
-            iterator.next();
-            return record.withoutTimestamp();
-        }
-
-        private RecordWithTimestamp getRecord() {
             final var keyByteArray = iterator.key();
             final var valueByteArray = iterator.value();
-            final var keyUnshifted = ByteBufferUtils.copyArrayShiftedBack(keyByteArray);
-            return RecordWithTimestamp.fromRawBytes(keyUnshifted, valueByteArray);
+            final var key = ByteBufferUtils.fromArrayShifted(keyByteArray);
+            final var value = RecordWithTimestamp.fromBytes(valueByteArray).getValue();
+            final var record = Record.of(key, value);
+            iterator.next();
+            return record;
         }
 
         private void skipEmptyRecords() {
-            while (hasNext() && getRecord().isEmpty()) {
+            while (hasNext() && RecordWithTimestamp.recordIsEmpty(iterator.value())) {
                 iterator.next();
             }
         }
