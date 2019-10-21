@@ -1,20 +1,30 @@
 package ru.mail.polis.service.saloed;
 
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeMap;
+import com.google.common.collect.TreeRangeMap;
+import com.google.common.hash.Hashing;
+import org.jetbrains.annotations.NotNull;
+
 import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.jetbrains.annotations.NotNull;
 
 public class Topology {
 
     private final String current;
     private final List<String> nodes;
+    private final RangeMap<Integer, String> nodesTable;
+    private static final int PART_SIZE = 1 << 22;
+    private static final int PARTS_NUMBER = 1 << (Integer.SIZE - 22);
 
     private Topology(final List<String> nodes, final String currentNode) {
         this.nodes = nodes;
         this.current = currentNode;
+        nodesTable = initializeTable();
     }
 
     /**
@@ -32,6 +42,27 @@ public class Topology {
         return new Topology(nodes, me);
     }
 
+    private int hash(final ByteBuffer key) {
+        final var keyCopy = key.duplicate();
+        return Hashing.sha256()
+                .newHasher(keyCopy.remaining())
+                .putBytes(keyCopy)
+                .hash()
+                .asInt();
+    }
+
+    private RangeMap<Integer, String> initializeTable() {
+        final RangeMap<Integer, String> table = TreeRangeMap.create();
+        final var nodeIterator = Iterators.cycle(nodes);
+        for (int i = 0; i < PARTS_NUMBER; i++) {
+            final var node = nodeIterator.next();
+            final var lowerBound = Integer.MIN_VALUE + i * PART_SIZE;
+            final var upperBound = Integer.MIN_VALUE + (i + 1) * PART_SIZE - 1;
+            final var key = Range.closed(lowerBound, upperBound);
+            table.put(key, node);
+        }
+        return table;
+    }
 
     /**
      * Check whether given node is current node.
@@ -59,8 +90,12 @@ public class Topology {
      * @return node
      */
     public String findNode(@NotNull final ByteBuffer key) {
-        final var nodeId = (key.hashCode() & Integer.MAX_VALUE) % nodes.size();
-        return nodes.get(nodeId);
+        final var keyHash = hash(key);
+        final var node = nodesTable.get(keyHash);
+        if (node == null) {
+            throw new IllegalStateException("No entry for key in table");
+        }
+        return node;
     }
 
 }
