@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.service.saloed.ServiceImpl;
+import ru.mail.polis.service.saloed.Topology;
 
 /**
  * Constructs {@link Service} instances.
@@ -62,6 +63,9 @@ public final class ServiceFactory {
             throw new IllegalArgumentException("DAOWithTimestamp expected");
         }
 
-        return ServiceImpl.create(port, (DAOWithTimestamp) dao);
+        final String me = "http://localhost:" + port;
+        final Topology clusterTopology = Topology.create(topology, me);
+
+        return ServiceImpl.create(port, (DAOWithTimestamp) dao, clusterTopology);
     }
 }

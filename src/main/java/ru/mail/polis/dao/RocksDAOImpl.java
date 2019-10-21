@@ -53,7 +53,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
     public ByteBuffer get(@NotNull final ByteBuffer key)
         throws IOException, NoSuchElementException {
         final var record = getRecord(key);
-        if (record.isEmpty()) {
+        if (!record.isValue()) {
             throw new NoSuchElementExceptionLite("Key is not present: " + key.toString());
         }
         return record.getValue();
@@ -68,7 +68,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @Override
     public void remove(@NotNull final ByteBuffer key) throws IOException {
-        final var record = RecordWithTimestamp.empty(System.currentTimeMillis());
+        final var record = RecordWithTimestamp.tombstone(System.currentTimeMillis());
         upsertRecord(key, record);
     }
 
@@ -93,14 +93,10 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @NotNull
     @Override
-    public RecordWithTimestamp getRecord(@NotNull final ByteBuffer key)
-        throws IOException, NoSuchElementException {
+    public RecordWithTimestamp getRecord(@NotNull final ByteBuffer key) throws IOException {
         final var keyBytes = ByteBufferUtils.toArrayShifted(key);
         try {
             final var valueBytes = db.get(keyBytes);
-            if (valueBytes == null) {
-                throw new NoSuchElementExceptionLite("Not found: " + Arrays.toString(keyBytes));
-            }
             return RecordWithTimestamp.fromBytes(valueBytes);
         } catch (RocksDBException exception) {
             throw new DAOException("Error while get", exception);

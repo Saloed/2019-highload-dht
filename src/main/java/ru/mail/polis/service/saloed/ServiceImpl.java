@@ -1,5 +1,11 @@
 package ru.mail.polis.service.saloed;
 
+import java.util.Map;
+import java.util.stream.Collectors;
+import one.nio.http.HttpClient;
+import one.nio.http.HttpException;
+import one.nio.net.ConnectionString;
+import one.nio.pool.PoolException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -30,31 +36,46 @@ import ru.mail.polis.service.Service;
 public final class ServiceImpl extends HttpServer implements Service {
 
     private static final Log log = LogFactory.getLog(ServiceImpl.class);
+    private static final String TIMESTAMP_HEADER = "X-Service-Timestamp:";
+    private static final String SERVICE_REQUEST_HEADER = "X-Service-Request:";
 
     private final DAOWithTimestamp dao;
+    private final Topology topology;
+    private final Map<String, HttpClient> pool;
 
-    private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao)
+    private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao,
+        @NotNull final Topology topology, @NotNull final Map<String, HttpClient> pool)
         throws IOException {
         super(config);
         this.dao = dao;
+        this.topology = topology;
+        this.pool = pool;
     }
 
     /**
      * Create service for specified port and DAO.
      *
-     * @param port port for incoming connections
-     * @param dao  data access object
+     * @param port     port for incoming connections
+     * @param dao      data access object
+     * @param topology of cluster
      * @return created service
      * @throws IOException if something went wrong during server startup process
      */
-    public static Service create(final int port, @NotNull final DAOWithTimestamp dao)
+    public static Service create(final int port, @NotNull final DAOWithTimestamp dao,
+        @NotNull final Topology topology)
         throws IOException {
         final var acceptor = new AcceptorConfig();
         final var config = new HttpServerConfig();
         acceptor.port = port;
         config.acceptors = new AcceptorConfig[]{acceptor};
         config.maxWorkers = Runtime.getRuntime().availableProcessors();
-        return new ServiceImpl(config, dao);
+        final var pool = topology.allNodes().stream()
+            .filter(node -> !topology.isMe(node))
+            .collect(Collectors.toMap(
+                node -> node,
+                node -> new HttpClient(new ConnectionString(node + "?timeout=100"))
+            ));
+        return new ServiceImpl(config, dao, topology, pool);
     }
 
     /**
@@ -84,10 +105,24 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
         final var method = request.getMethod();
         final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
-        final var timestamp = System.currentTimeMillis();
+        final var timestamp = getRequestTimestamp(request);
+        final var nodeToProcess = topology.findNode(key);
+        if (isRequestFromService(request) || topology.isMe(nodeToProcess)) {
+            asyncExecute(() -> {
+                try {
+                    dispatchEntityRequest(request, session, key, timestamp, method);
+                } catch (IOException ex) {
+                    response(session, Response.INTERNAL_ERROR);
+                }
+            });
+            return;
+        }
+        setRequestTimestamp(request, timestamp);
+        setRequestSelfProcess(request);
         asyncExecute(() -> {
             try {
-                dispatchEntityRequest(request, session, key, timestamp, method);
+                final var response = proxy(nodeToProcess, request);
+                session.sendResponse(response);
             } catch (IOException ex) {
                 response(session, Response.INTERNAL_ERROR);
             }
@@ -152,6 +187,32 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
     }
 
+    private void setRequestTimestamp(final Request request, final long timestamp) {
+        request.addHeader(TIMESTAMP_HEADER + timestamp);
+    }
+
+    private void setRequestSelfProcess(final Request request) {
+        request.addHeader(SERVICE_REQUEST_HEADER + "true");
+    }
+
+    private boolean isRequestFromService(final Request request) {
+        final var header = request.getHeader(SERVICE_REQUEST_HEADER);
+        if (header == null) {
+            return false;
+        }
+        final var value = header.substring(SERVICE_REQUEST_HEADER.length());
+        return Boolean.parseBoolean(value);
+    }
+
+    private long getRequestTimestamp(final Request request) {
+        final var header = request.getHeader(TIMESTAMP_HEADER);
+        if (header == null) {
+            return System.currentTimeMillis();
+        }
+        final var value = header.substring(TIMESTAMP_HEADER.length());
+        return Long.parseLong(value);
+    }
+
     private void retrieveEntities(
         @NotNull final ByteBuffer start,
         @Nullable final ByteBuffer end,
@@ -164,7 +225,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         throws IOException {
         try {
             final RecordWithTimestamp record = dao.getRecord(key);
-            if (!record.isEmpty()) {
+            if (record.isValue()) {
                 final var valueArray = ByteBufferUtils.toArray(record.getValue());
                 response(session, Response.OK, valueArray);
             } else {
@@ -186,7 +247,7 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private void deleteEntity(final ByteBuffer key, long timestamp, final HttpSession session)
         throws IOException {
-        final var record = RecordWithTimestamp.empty(timestamp);
+        final var record = RecordWithTimestamp.tombstone(timestamp);
         dao.upsertRecord(key, record);
         response(session, Response.ACCEPTED);
     }
@@ -199,6 +260,17 @@ public final class ServiceImpl extends HttpServer implements Service {
     @Override
     public void handleDefault(final Request request, final HttpSession session) {
         response(session, Response.BAD_REQUEST);
+    }
+
+    private Response proxy(final String node, final Request request) throws IOException {
+        if (topology.isMe(node)) {
+            throw new IllegalArgumentException("Self proxy");
+        }
+        try {
+            return pool.get(node).invoke(request);
+        } catch (InterruptedException | PoolException | HttpException e) {
+            throw new IOException("Error in proxy", e);
+        }
     }
 
     private void response(final HttpSession session, final String resultCode) {

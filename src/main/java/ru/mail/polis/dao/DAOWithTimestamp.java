@@ -13,12 +13,10 @@ public interface DAOWithTimestamp extends DAO {
      *
      * @param key of record
      * @return obtained record
-     * @throws IOException            if storage error occurred
-     * @throws NoSuchElementException if no such key in storage
+     * @throws IOException if storage error occurred
      */
     @NotNull
-    RecordWithTimestamp getRecord(@NotNull final ByteBuffer key)
-        throws IOException, NoSuchElementException;
+    RecordWithTimestamp getRecord(@NotNull final ByteBuffer key) throws IOException;
 
     /**
      * Modify or create record in storage by given key.

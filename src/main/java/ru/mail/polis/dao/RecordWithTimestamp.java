@@ -3,28 +3,30 @@ package ru.mail.polis.dao;
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
+import org.jetbrains.annotations.Nullable;
 
-public abstract class RecordWithTimestamp {
-
-    static final byte TOMBSTONE = 0;
-    static final byte VALUE = 1;
+public final class RecordWithTimestamp {
 
     private final long timestamp;
+    private final RecordType kind;
+    private final ByteBuffer value;
 
-    RecordWithTimestamp(final long timestamp) {
+    private RecordWithTimestamp(final RecordType kind, final long timestamp,
+        final ByteBuffer value) {
         this.timestamp = timestamp;
+        this.kind = kind;
+        this.value = value;
     }
 
     /**
-     * Performs emptiness check {@link #isEmpty()} on serialized record {@link #toRawBytes()}.
+     * Performs emptiness check {@link #isValue()} on serialized record {@link #toRawBytes()}.
      *
      * @param raw serialized record
      * @return result of check
      */
     public static boolean recordIsEmpty(@NotNull final byte[] raw) {
-        return raw[8] == TOMBSTONE;
+        return raw[8] != RecordType.VALUE.value;
     }
-
 
     /**
      * Deserialize record from bytes {@link #toRawBytes()}.
@@ -32,14 +34,14 @@ public abstract class RecordWithTimestamp {
      * @param raw bytes
      * @return deserialized record
      */
-    public static RecordWithTimestamp fromBytes(@NotNull final byte[] raw) {
+    public static RecordWithTimestamp fromBytes(@Nullable final byte[] raw) {
+        if (raw == null) {
+            return new RecordWithTimestamp(RecordType.EMPTY, -1, null);
+        }
         final var buffer = ByteBuffer.wrap(raw);
         final var timestamp = buffer.getLong();
-        final var marker = buffer.get();
-        if (marker == TOMBSTONE) {
-            return new EmptyRecordWithTimestamp(timestamp);
-        }
-        return new ValueRecordWithTimestamp(buffer, timestamp);
+        final var kind = RecordType.fromValue(buffer.get());
+        return new RecordWithTimestamp(kind, timestamp, buffer);
     }
 
     /**
@@ -51,7 +53,7 @@ public abstract class RecordWithTimestamp {
      */
     public static RecordWithTimestamp fromValue(@NotNull final ByteBuffer value,
         final long timestamp) {
-        return new ValueRecordWithTimestamp(value, timestamp);
+        return new RecordWithTimestamp(RecordType.VALUE, timestamp, value);
     }
 
     /**
@@ -60,8 +62,8 @@ public abstract class RecordWithTimestamp {
      * @param timestamp of record
      * @return record
      */
-    public static RecordWithTimestamp empty(final long timestamp) {
-        return new EmptyRecordWithTimestamp(timestamp);
+    public static RecordWithTimestamp tombstone(final long timestamp) {
+        return new RecordWithTimestamp(RecordType.TOMBSTONE, timestamp, null);
     }
 
     public long getTimestamp() {
@@ -69,27 +71,78 @@ public abstract class RecordWithTimestamp {
     }
 
     /**
-     * Check whether record is a tombstone or contains some value.
+     * Check whether record contains some value.
      *
-     * @return true if record is {@link #TOMBSTONE} and false otherwise
+     * @return true if record is {@link RecordType#VALUE} and false otherwise
      */
-    public abstract boolean isEmpty();
+    public boolean isValue() {
+        return kind == RecordType.VALUE;
+    }
 
     /**
-     * Retrieve containing value if possible (not {@link #isEmpty()}).
+     * Check whether record is empty.
+     *
+     * @return true if record is {@link RecordType#EMPTY} and false otherwise
+     */
+    public boolean isEmpty() {
+        return kind == RecordType.EMPTY;
+    }
+
+    /**
+     * Retrieve containing value if possible  {@link #isValue()}.
      *
      * @return containing value
      * @throws UnsupportedOperationException if record is empty
      */
-    public abstract ByteBuffer getValue() throws UnsupportedOperationException;
+    public ByteBuffer getValue() throws UnsupportedOperationException {
+        if (!isValue()) {
+            throw new UnsupportedOperationException("Empty record has no value");
+        }
+        return value;
+    }
 
     /**
      * Serialize record to byte array.
+     * <p>
      * Format:
-     * |   timestamp  | mark (VALUE or TOMBSTONE) |     value     |
-     * | -- 8 bytes --| --------- 1 byte ---------| 0 - Inf bytes |
+     * <p>
+     * |   timestamp  | mark (VALUE, TOMBSTONE, EMPTY)   |  value        |
+     * <p>
+     * | -- 8 bytes --| ------------- 1 byte ------------| 0 - Inf bytes |
      *
      * @return serialized record
      */
-    public abstract byte[] toRawBytes();
+    public byte[] toRawBytes() {
+        final var valueSize = isValue() ? value.remaining() : 0;
+        final var buffer = ByteBuffer
+            .allocate(Long.BYTES + 1 + valueSize)
+            .putLong(getTimestamp())
+            .put(kind.value);
+        if (isValue()) {
+            buffer.put(value.duplicate());
+        }
+        return buffer.array();
+    }
+
+    private enum RecordType {
+        VALUE((byte) 1),
+        TOMBSTONE((byte) -1),
+        EMPTY((byte) 0);
+
+        final byte value;
+
+        RecordType(byte value) {
+            this.value = value;
+        }
+
+        static RecordType fromValue(byte value) {
+            if (value == VALUE.value) {
+                return VALUE;
+            } else if (value == TOMBSTONE.value) {
+                return TOMBSTONE;
+            } else {
+                return EMPTY;
+            }
+        }
+    }
 }
