@@ -22,7 +22,21 @@ public class StreamHttpClient extends HttpClient {
         super(conn);
     }
 
-    public <T> StreamReader<T> invokeStream(final Request request, final ChunkBuilder<T> chunkBuilder)
+    /**
+     * Perform HTTP request, with expected response transfer encoding as chunked. Return iterator
+     * over response chunks.
+     *
+     * @param request      HTTP request
+     * @param chunkBuilder deserializer for retrieved chunks
+     * @param <T>          type of chunk
+     * @return iterator over chunks
+     * @throws InterruptedException something bad happens
+     * @throws PoolException        socket pool exception occurred
+     * @throws IOException          if network error occurred
+     * @throws HttpException        if http format exception occurred
+     */
+    public <T> StreamReader<T> invokeStream(final Request request,
+        final ChunkBuilder<T> chunkBuilder)
         throws InterruptedException, PoolException, IOException, HttpException {
         byte[] rawRequest = request.toBytes();
         StreamReader<T> responseReader;
@@ -137,7 +151,7 @@ public class StreamHttpClient extends HttpClient {
             return result;
         }
 
-        void readIfNeed() throws IOException, HttpException {
+        private void readIfNeed() throws IOException, HttpException {
             if (!needRead) {
                 return;
             }
@@ -145,7 +159,7 @@ public class StreamHttpClient extends HttpClient {
             readSingleChunk();
         }
 
-        String readLine() throws IOException, HttpException {
+        private String readLine() throws IOException, HttpException {
             byte[] buf = this.buf;
             int pos = this.pos;
             int lineStart = pos;
@@ -163,7 +177,7 @@ public class StreamHttpClient extends HttpClient {
             return Utf8.read(buf, lineStart, pos - lineStart - 2);
         }
 
-        void readSingleChunk() throws IOException, HttpException {
+        private void readSingleChunk() throws IOException, HttpException {
             if (lastChunkReaded) {
                 return;
             }
