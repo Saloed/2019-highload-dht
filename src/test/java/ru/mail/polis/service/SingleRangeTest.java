@@ -32,6 +32,7 @@ import ru.mail.polis.dao.DAOFactory;
 import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -71,7 +72,7 @@ class SingleRangeTest extends TestBase {
         port = randomPort();
         data = Files.createTempDirectory();
         dao = DAOFactory.create(data);
-        storage = ServiceFactory.create(port, dao);
+        storage = ServiceFactory.create(port, dao, Collections.singleton(endpoint(port)));
         storage.start();
         Thread.sleep(TimeUnit.SECONDS.toMillis(1));
         reset();

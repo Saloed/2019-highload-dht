@@ -18,6 +18,7 @@ package ru.mail.polis;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Collections;
 
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.dao.DAOFactory;
@@ -45,7 +46,8 @@ public final class Server {
         final Service service =
                 ServiceFactory.create(
                         PORT,
-                        dao);
+                        dao,
+                        Collections.singleton("http://localhost:" + PORT));
         service.start();
         Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> {

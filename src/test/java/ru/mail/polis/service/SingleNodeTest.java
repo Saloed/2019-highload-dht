@@ -56,7 +56,7 @@ class SingleNodeTest extends TestBase {
         data = Files.createTempDirectory();
         dao = DAOFactory.create(data);
         endpoint = endpoint(port);
-        storage = ServiceFactory.create(port, dao);
+        storage = ServiceFactory.create(port, dao, Collections.singleton(endpoint));
         storage.start();
         Thread.sleep(TimeUnit.SECONDS.toMillis(1));
         reset();
@@ -246,7 +246,7 @@ class SingleNodeTest extends TestBase {
             dao = DAOFactory.create(data);
             port = randomPort();
             endpoint = endpoint(port);
-            storage = ServiceFactory.create(port, dao);
+            storage = ServiceFactory.create(port, dao, Collections.singleton(endpoint));
             storage.start();
             Thread.sleep(TimeUnit.SECONDS.toMillis(1));
             reset();
