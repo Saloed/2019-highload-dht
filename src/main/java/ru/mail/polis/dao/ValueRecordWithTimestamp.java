@@ -3,6 +3,7 @@ package ru.mail.polis.dao;
 import java.nio.ByteBuffer;
 
 public class ValueRecordWithTimestamp extends RecordWithTimestamp {
+
     private final ByteBuffer value;
 
     ValueRecordWithTimestamp(final ByteBuffer value, final long timestamp) {
@@ -11,21 +12,22 @@ public class ValueRecordWithTimestamp extends RecordWithTimestamp {
     }
 
     @Override
-    boolean isEmpty() {
+    public boolean isEmpty() {
         return false;
     }
 
     @Override
-    ByteBuffer getValue() {
+    public ByteBuffer getValue() throws UnsupportedOperationException {
         return value;
     }
 
     @Override
-    byte[] toRawBytes() {
-        final var buffer = ByteBuffer.allocate(Long.BYTES + 1 + value.remaining());
-        buffer.putLong(getTimestamp());
-        buffer.put(VALUE);
-        buffer.put(value.duplicate());
-        return buffer.array();
+    public byte[] toRawBytes() {
+        return ByteBuffer
+            .allocate(Long.BYTES + 1 + value.remaining())
+            .putLong(getTimestamp())
+            .put(VALUE)
+            .put(value.duplicate())
+            .array();
     }
 }

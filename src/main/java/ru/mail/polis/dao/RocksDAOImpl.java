@@ -2,7 +2,11 @@ package ru.mail.polis.dao;
 
 import org.jetbrains.annotations.NotNull;
 
-import org.rocksdb.*;
+import org.rocksdb.BuiltinComparator;
+import org.rocksdb.Options;
+import org.rocksdb.RocksDB;
+import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
 
 import ru.mail.polis.Record;
 
@@ -26,8 +30,8 @@ public class RocksDAOImpl implements DAOWithTimestamp {
         RocksDB.loadLibrary();
         try {
             final var options = new Options()
-                    .setCreateIfMissing(true)
-                    .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
+                .setCreateIfMissing(true)
+                .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
             final var db = RocksDB.open(options, data.getAbsolutePath());
             return new RocksDAOImpl(db);
         } catch (RocksDBException exception) {
@@ -47,7 +51,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
     @NotNull
     @Override
     public ByteBuffer get(@NotNull final ByteBuffer key)
-            throws IOException, NoSuchElementException {
+        throws IOException, NoSuchElementException {
         final var record = getRecord(key);
         if (record.isEmpty()) {
             throw new NoSuchElementExceptionLite("Key is not present: " + key.toString());
@@ -56,7 +60,8 @@ public class RocksDAOImpl implements DAOWithTimestamp {
     }
 
     @Override
-    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) throws IOException {
+    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value)
+        throws IOException {
         final var record = RecordWithTimestamp.fromValue(value, System.currentTimeMillis());
         upsertRecord(key, record);
     }
@@ -88,7 +93,8 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @NotNull
     @Override
-    public RecordWithTimestamp getRecord(@NotNull final ByteBuffer key) throws IOException, NoSuchElementException {
+    public RecordWithTimestamp getRecord(@NotNull final ByteBuffer key)
+        throws IOException, NoSuchElementException {
         final var keyBytes = ByteBufferUtils.toArrayShifted(key);
         try {
             final var valueBytes = db.get(keyBytes);
@@ -102,7 +108,8 @@ public class RocksDAOImpl implements DAOWithTimestamp {
     }
 
     @Override
-    public void upsertRecord(@NotNull final ByteBuffer key, @NotNull final RecordWithTimestamp record) throws IOException {
+    public void upsertRecord(@NotNull final ByteBuffer key,
+        @NotNull final RecordWithTimestamp record) throws IOException {
         final var keyBytes = ByteBufferUtils.toArrayShifted(key);
         final var valueBytes = record.toRawBytes();
         try {

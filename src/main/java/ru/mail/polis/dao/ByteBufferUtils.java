@@ -63,30 +63,6 @@ public final class ByteBufferUtils {
         return ByteBuffer.wrap(arrayCopy);
     }
 
-    /**
-     * Copy and shifts array by {@link Byte#MIN_VALUE}
-     *
-     * @param array to shift
-     * @return copy of array shifted
-     */
-    public static byte[] copyArrayShifted(@NotNull final byte[] array) {
-        final var arrayCopy = Arrays.copyOf(array, array.length);
-        shiftArrayInplace(arrayCopy, Byte.MIN_VALUE);
-        return arrayCopy;
-    }
-
-    /**
-     * Copy and shifts array by {@link Byte#MIN_VALUE} back
-     *
-     * @param array to shift
-     * @return copy of array shifted
-     */
-    public static byte[] copyArrayShiftedBack(@NotNull final byte[] array) {
-        final var arrayCopy = Arrays.copyOf(array, array.length);
-        shiftArrayInplace(arrayCopy, -Byte.MIN_VALUE);
-        return arrayCopy;
-    }
-
     private static void shiftArrayInplace(final byte[] array, final int shift) {
         for (int i = 0; i < array.length; i++) {
             final var uint = Byte.toUnsignedInt(array[i]);

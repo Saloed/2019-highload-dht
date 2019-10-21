@@ -3,25 +3,27 @@ package ru.mail.polis.dao;
 import java.nio.ByteBuffer;
 
 public class EmptyRecordWithTimestamp extends RecordWithTimestamp {
-    EmptyRecordWithTimestamp(long timestamp) {
+
+    EmptyRecordWithTimestamp(final long timestamp) {
         super(timestamp);
     }
 
     @Override
-    boolean isEmpty() {
+    public boolean isEmpty() {
         return true;
     }
 
     @Override
-    ByteBuffer getValue() {
+    public ByteBuffer getValue() throws UnsupportedOperationException {
         throw new UnsupportedOperationException("Empty record has no value");
     }
 
     @Override
-    byte[] toRawBytes() {
-        final var buffer = ByteBuffer.allocate(Long.BYTES + 1);
-        buffer.putLong(getTimestamp());
-        buffer.put(TOMBSTONE);
-        return buffer.array();
+    public byte[] toRawBytes() {
+        return ByteBuffer
+            .allocate(Long.BYTES + 1)
+            .putLong(getTimestamp())
+            .put(TOMBSTONE)
+            .array();
     }
 }

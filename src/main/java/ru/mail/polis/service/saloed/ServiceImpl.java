@@ -1,5 +1,13 @@
 package ru.mail.polis.service.saloed;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.NoSuchElementException;
+
 import one.nio.http.HttpServer;
 import one.nio.http.HttpServerConfig;
 import one.nio.http.HttpSession;
@@ -14,18 +22,10 @@ import one.nio.server.RejectedSessionException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
 import ru.mail.polis.dao.ByteBufferUtils;
-import ru.mail.polis.dao.DAO;
 import ru.mail.polis.dao.DAOWithTimestamp;
+import ru.mail.polis.dao.RecordWithTimestamp;
 import ru.mail.polis.service.Service;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.NoSuchElementException;
 
 public final class ServiceImpl extends HttpServer implements Service {
 
@@ -33,7 +33,8 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private final DAOWithTimestamp dao;
 
-    private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao) throws IOException {
+    private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao)
+        throws IOException {
         super(config);
         this.dao = dao;
     }
@@ -46,7 +47,8 @@ public final class ServiceImpl extends HttpServer implements Service {
      * @return created service
      * @throws IOException if something went wrong during server startup process
      */
-    public static Service create(final int port, @NotNull final DAOWithTimestamp dao) throws IOException {
+    public static Service create(final int port, @NotNull final DAOWithTimestamp dao)
+        throws IOException {
         final var acceptor = new AcceptorConfig();
         final var config = new HttpServerConfig();
         acceptor.port = port;
@@ -82,9 +84,10 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
         final var method = request.getMethod();
         final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
+        final var timestamp = System.currentTimeMillis();
         asyncExecute(() -> {
             try {
-                dispatchEntityRequest(request, session, key, method);
+                dispatchEntityRequest(request, session, key, timestamp, method);
             } catch (IOException ex) {
                 response(session, Response.INTERNAL_ERROR);
             }
@@ -127,6 +130,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         final Request request,
         final HttpSession session,
         final ByteBuffer key,
+        final long timestamp,
         final int method) throws IOException {
         switch (method) {
             case Request.METHOD_GET: {
@@ -134,11 +138,11 @@ public final class ServiceImpl extends HttpServer implements Service {
                 break;
             }
             case Request.METHOD_PUT: {
-                putEntity(key, request, session);
+                putEntity(key, timestamp, request, session);
                 break;
             }
             case Request.METHOD_DELETE: {
-                deleteEntity(key, session);
+                deleteEntity(key, timestamp, session);
                 break;
             }
             default: {
@@ -156,25 +160,34 @@ public final class ServiceImpl extends HttpServer implements Service {
         streamSession.stream(rangeIterator);
     }
 
-    private void getEntity(final ByteBuffer key, final HttpSession session) throws IOException {
+    private void getEntity(final ByteBuffer key, final HttpSession session)
+        throws IOException {
         try {
-            final var value = dao.get(key).duplicate();
-            final var valueArray = ByteBufferUtils.toArray(value);
-            response(session, Response.OK, valueArray);
+            final RecordWithTimestamp record = dao.getRecord(key);
+            if (!record.isEmpty()) {
+                final var valueArray = ByteBufferUtils.toArray(record.getValue());
+                response(session, Response.OK, valueArray);
+            } else {
+                response(session, Response.NOT_FOUND);
+            }
         } catch (NoSuchElementException ex) {
             response(session, Response.NOT_FOUND);
         }
     }
 
-    private void putEntity(final ByteBuffer key, final Request request, final HttpSession session)
+    private void putEntity(final ByteBuffer key, long timestamp, final Request request,
+        final HttpSession session)
         throws IOException {
         final var value = ByteBuffer.wrap(request.getBody());
-        dao.upsert(key, value);
+        final var record = RecordWithTimestamp.fromValue(value, timestamp);
+        dao.upsertRecord(key, record);
         response(session, Response.CREATED);
     }
 
-    private void deleteEntity(final ByteBuffer key, final HttpSession session) throws IOException {
-        dao.remove(key);
+    private void deleteEntity(final ByteBuffer key, long timestamp, final HttpSession session)
+        throws IOException {
+        final var record = RecordWithTimestamp.empty(timestamp);
+        dao.upsertRecord(key, record);
         response(session, Response.ACCEPTED);
     }
 
