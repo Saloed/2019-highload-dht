@@ -185,8 +185,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         if (header == null) {
             return false;
         }
-        final var value = header.substring(SERVICE_REQUEST_HEADER.length());
-        return Boolean.parseBoolean(value);
+        return Boolean.parseBoolean(header);
     }
 
     private long getRequestTimestamp(final Request request) {
@@ -194,8 +193,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         if (header == null) {
             return System.currentTimeMillis();
         }
-        final var value = header.substring(TIMESTAMP_HEADER.length());
-        return Long.parseLong(value);
+        return Long.parseLong(header);
     }
 
     private void retrieveEntities(
