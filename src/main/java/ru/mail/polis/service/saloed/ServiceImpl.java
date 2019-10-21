@@ -1,5 +1,6 @@
 package ru.mail.polis.service.saloed;
 
+import com.google.common.collect.ImmutableMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 import one.nio.http.HttpClient;
@@ -12,7 +13,6 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.NoSuchElementException;
 
 import one.nio.http.HttpServer;
 import one.nio.http.HttpServerConfig;
@@ -28,9 +28,7 @@ import one.nio.server.RejectedSessionException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAOWithTimestamp;
-import ru.mail.polis.dao.RecordWithTimestamp;
 import ru.mail.polis.service.Service;
 
 public final class ServiceImpl extends HttpServer implements Service {
@@ -42,6 +40,7 @@ public final class ServiceImpl extends HttpServer implements Service {
     private final DAOWithTimestamp dao;
     private final Topology topology;
     private final Map<String, HttpClient> pool;
+    private final Map<Integer, EntityRequestProcessor> entityRequestProcessor;
 
     private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao,
         @NotNull final Topology topology, @NotNull final Map<String, HttpClient> pool)
@@ -50,6 +49,12 @@ public final class ServiceImpl extends HttpServer implements Service {
         this.dao = dao;
         this.topology = topology;
         this.pool = pool;
+        this.entityRequestProcessor = ImmutableMap.of(
+            Request.METHOD_GET, EntityRequestProcessor.forHttpMethod(Request.METHOD_GET, dao),
+            Request.METHOD_PUT, EntityRequestProcessor.forHttpMethod(Request.METHOD_PUT, dao),
+            Request.METHOD_DELETE, EntityRequestProcessor.forHttpMethod(Request.METHOD_DELETE, dao)
+        );
+
     }
 
     /**
@@ -104,25 +109,30 @@ public final class ServiceImpl extends HttpServer implements Service {
             return;
         }
         final var method = request.getMethod();
-        final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
-        final var timestamp = getRequestTimestamp(request);
-        final var nodeToProcess = topology.findNode(key);
-        if (isRequestFromService(request) || topology.isMe(nodeToProcess)) {
-            asyncExecute(() -> {
-                try {
-                    dispatchEntityRequest(request, session, key, timestamp, method);
-                } catch (IOException ex) {
-                    response(session, Response.INTERNAL_ERROR);
-                }
-            });
+        final var processor = entityRequestProcessor.get(method);
+        if (processor == null) {
+            response(session, Response.METHOD_NOT_ALLOWED);
             return;
         }
-        setRequestTimestamp(request, timestamp);
-        setRequestSelfProcess(request);
+        final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
+        final var body = method == Request.METHOD_PUT ? ByteBuffer.wrap(request.getBody()) : null;
+        final var timestamp = getRequestTimestamp(request);
+        final var isServiceRequest = isRequestFromService(request);
+        final var nodeToProcess = topology.findNode(key);
         asyncExecute(() -> {
             try {
-                final var response = proxy(nodeToProcess, request);
-                session.sendResponse(response);
+                Response response;
+                if (isServiceRequest) {
+                    response = processor.processForService(timestamp, key, body);
+                } else if (topology.isMe(nodeToProcess)) {
+                    response = processor.processForUser(timestamp, key, body);
+                } else {
+                    setRequestTimestamp(request, timestamp);
+                    setRequestFromService(request);
+                    final var serviceResponse = proxy(nodeToProcess, request);
+                    response = processor.makeUserResponse(serviceResponse);
+                }
+                response(session, response);
             } catch (IOException ex) {
                 response(session, Response.INTERNAL_ERROR);
             }
@@ -161,37 +171,11 @@ public final class ServiceImpl extends HttpServer implements Service {
         });
     }
 
-    private void dispatchEntityRequest(
-        final Request request,
-        final HttpSession session,
-        final ByteBuffer key,
-        final long timestamp,
-        final int method) throws IOException {
-        switch (method) {
-            case Request.METHOD_GET: {
-                getEntity(key, session);
-                break;
-            }
-            case Request.METHOD_PUT: {
-                putEntity(key, timestamp, request, session);
-                break;
-            }
-            case Request.METHOD_DELETE: {
-                deleteEntity(key, timestamp, session);
-                break;
-            }
-            default: {
-                response(session, Response.METHOD_NOT_ALLOWED);
-                break;
-            }
-        }
-    }
-
     private void setRequestTimestamp(final Request request, final long timestamp) {
         request.addHeader(TIMESTAMP_HEADER + timestamp);
     }
 
-    private void setRequestSelfProcess(final Request request) {
+    private void setRequestFromService(final Request request) {
         request.addHeader(SERVICE_REQUEST_HEADER + "true");
     }
 
@@ -219,37 +203,6 @@ public final class ServiceImpl extends HttpServer implements Service {
         final RecordStreamHttpSession streamSession) throws IOException {
         final var rangeIterator = dao.range(start, end);
         streamSession.stream(rangeIterator);
-    }
-
-    private void getEntity(final ByteBuffer key, final HttpSession session)
-        throws IOException {
-        try {
-            final RecordWithTimestamp record = dao.getRecord(key);
-            if (record.isValue()) {
-                final var valueArray = ByteBufferUtils.toArray(record.getValue());
-                response(session, Response.OK, valueArray);
-            } else {
-                response(session, Response.NOT_FOUND);
-            }
-        } catch (NoSuchElementException ex) {
-            response(session, Response.NOT_FOUND);
-        }
-    }
-
-    private void putEntity(final ByteBuffer key, long timestamp, final Request request,
-        final HttpSession session)
-        throws IOException {
-        final var value = ByteBuffer.wrap(request.getBody());
-        final var record = RecordWithTimestamp.fromValue(value, timestamp);
-        dao.upsertRecord(key, record);
-        response(session, Response.CREATED);
-    }
-
-    private void deleteEntity(final ByteBuffer key, long timestamp, final HttpSession session)
-        throws IOException {
-        final var record = RecordWithTimestamp.tombstone(timestamp);
-        dao.upsertRecord(key, record);
-        response(session, Response.ACCEPTED);
     }
 
     @Override
@@ -285,6 +238,10 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private void response(final HttpSession session, final String resultCode, final byte[] body) {
         final var response = new Response(resultCode, body);
+        response(session, response);
+    }
+
+    private void response(final HttpSession session, final Response response) {
         try {
             session.sendResponse(response);
         } catch (IOException exception) {
