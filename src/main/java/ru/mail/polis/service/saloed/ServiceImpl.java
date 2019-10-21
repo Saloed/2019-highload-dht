@@ -134,6 +134,7 @@ public final class ServiceImpl extends HttpServer implements Service {
                 }
                 response(session, response);
             } catch (IOException ex) {
+                log.error("Error while processing request", ex);
                 response(session, Response.INTERNAL_ERROR);
             }
         });
