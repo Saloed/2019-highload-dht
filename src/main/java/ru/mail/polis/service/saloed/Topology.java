@@ -15,11 +15,11 @@ import java.util.stream.Collectors;
 
 public class Topology {
 
+    private static final int PART_SIZE = 1 << 22;
+    private static final int PARTS_NUMBER = 1 << (Integer.SIZE - 22);
     private final String current;
     private final List<String> nodes;
     private final RangeMap<Integer, String> nodesTable;
-    private static final int PART_SIZE = 1 << 22;
-    private static final int PARTS_NUMBER = 1 << (Integer.SIZE - 22);
 
     private Topology(final List<String> nodes, final String currentNode) {
         this.nodes = nodes;
@@ -45,10 +45,10 @@ public class Topology {
     private int hash(final ByteBuffer key) {
         final var keyCopy = key.duplicate();
         return Hashing.sha256()
-                .newHasher(keyCopy.remaining())
-                .putBytes(keyCopy)
-                .hash()
-                .asInt();
+            .newHasher(keyCopy.remaining())
+            .putBytes(keyCopy)
+            .hash()
+            .asInt();
     }
 
     private RangeMap<Integer, String> initializeTable() {
