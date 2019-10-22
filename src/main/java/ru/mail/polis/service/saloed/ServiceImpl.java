@@ -1,12 +1,9 @@
 package ru.mail.polis.service.saloed;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterators;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.stream.Collectors;
 import one.nio.http.HttpException;
@@ -25,8 +22,6 @@ import one.nio.server.RejectedSessionException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import ru.mail.polis.Record;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.IOExceptionLight;
 import ru.mail.polis.service.Service;
@@ -75,6 +70,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         acceptor.port = port;
         config.acceptors = new AcceptorConfig[]{acceptor};
         config.maxWorkers = Runtime.getRuntime().availableProcessors();
+        config.queueTime = 10; // ms
         final var pool = topology.allNodes().stream()
             .filter(node -> !topology.isMe(node))
             .collect(Collectors.toMap(
@@ -167,11 +163,13 @@ public final class ServiceImpl extends HttpServer implements Service {
         final var streamSession = (RecordStreamHttpSession) session;
         final var isServiceRequest = isRequestFromService(request);
         asyncExecute(() -> {
+            final var processor = new EntitiesRequestProcessor(topology, dao, pool);
             try {
                 if (isServiceRequest) {
-                    retrieveEntities(startBytes, finalEndBytes, streamSession);
+                    processor.processForService(startBytes, finalEndBytes, streamSession);
                 } else {
-                    retrieveEntities(startBytes, finalEndBytes, streamSession, request);
+                    setRequestFromService(request);
+                    processor.processForUser(startBytes, finalEndBytes, request, streamSession);
                 }
             } catch (IOException exception) {
                 response(session, Response.INTERNAL_ERROR);
@@ -201,52 +199,6 @@ public final class ServiceImpl extends HttpServer implements Service {
             return System.currentTimeMillis();
         }
         return Long.parseLong(header);
-    }
-
-    private void retrieveEntities(
-        @NotNull final ByteBuffer start,
-        @Nullable final ByteBuffer end,
-        final RecordStreamHttpSession streamSession,
-        final Request request) throws IOException {
-        final var iterators = new ArrayList<Iterator<Record>>();
-        setRequestFromService(request);
-        for (final var node : topology.allNodes()) {
-            if (topology.isMe(node)) {
-                final var iterator = dao.range(start, end);
-                iterators.add(iterator);
-                continue;
-            }
-            final var client = pool.get(node);
-            try {
-                final var iterator = client.invokeStream(request, (bytes) -> {
-                    final var str = new String(bytes, StandardCharsets.UTF_8);
-                    final var firstDelimiter = str.indexOf('\n');
-                    final var keyStr = str.substring(0, firstDelimiter);
-                    final var valueStr = str.substring(firstDelimiter);
-                    final var keyBytes = ByteBuffer.wrap(keyStr.getBytes(StandardCharsets.UTF_8));
-                    final var valueBytes = ByteBuffer
-                        .wrap(valueStr.getBytes(StandardCharsets.UTF_8));
-                    return Record.of(keyBytes, valueBytes);
-                });
-                if (iterator.getResponse().getStatus() != 200 || !iterator.isAvailable()) {
-                    throw new IOExceptionLight("Unexpected response from node");
-                }
-                iterators.add(iterator);
-            } catch (InterruptedException | HttpException | PoolException e) {
-                throw new IOExceptionLight("Exception while entities request", e);
-            }
-
-        }
-        final var mergedIterators = Iterators.mergeSorted(iterators, Record::compareTo);
-        streamSession.stream(mergedIterators);
-    }
-
-    private void retrieveEntities(
-        @NotNull final ByteBuffer start,
-        @Nullable final ByteBuffer end,
-        final RecordStreamHttpSession streamSession) throws IOException {
-        final var iterator = dao.range(start, end);
-        streamSession.stream(iterator);
     }
 
 

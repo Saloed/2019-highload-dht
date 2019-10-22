@@ -38,7 +38,7 @@ final class RecordStreamHttpSession extends HttpSession {
      * @param recordIterator with data
      * @throws IOException if network errors occurred
      */
-    void stream(final Iterator<Record> recordIterator) throws IOException {
+    synchronized void stream(final Iterator<Record> recordIterator) throws IOException {
         this.recordIterator = recordIterator;
         if (handling == null) {
             throw new IOExceptionLight("Out of order response");
@@ -102,7 +102,7 @@ final class RecordStreamHttpSession extends HttpSession {
         }
     }
 
-    private void next() throws IOException {
+    private synchronized void next() throws IOException {
         if (recordIterator == null) {
             throw new IllegalStateException("Iterator is missing");
         }

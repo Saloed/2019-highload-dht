@@ -1,6 +1,5 @@
 package ru.mail.polis.service.saloed;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.Iterator;
@@ -27,50 +26,57 @@ public class StreamHttpClient extends HttpClient {
      * Perform HTTP request, with expected response transfer encoding as chunked. Return iterator
      * over response chunks.
      *
-     * @param request      HTTP request
-     * @param chunkBuilder deserializer for retrieved chunks
-     * @param <T>          type of chunk
+     * @param request HTTP request
      * @return iterator over chunks
      * @throws InterruptedException something bad happens
      * @throws PoolException        socket pool exception occurred
      * @throws IOException          if network error occurred
      * @throws HttpException        if http format exception occurred
      */
-    public <T> StreamReader<T> invokeStream(final Request request,
-        final ChunkBuilder<T> chunkBuilder)
+    public synchronized Response invokeStream(final Request request,
+        final StreamConsumer streamConsumer)
         throws InterruptedException, PoolException, IOException, HttpException {
+        int method = request.getMethod();
         byte[] rawRequest = request.toBytes();
-        StreamReader<T> responseReader;
+        StreamReader responseReader;
 
         Socket socket = borrowObject();
+        boolean keepAlive = false;
         try {
-            socket.setTimeout(timeout == 0 ? readTimeout : timeout);
-            socket.writeFully(rawRequest, 0, rawRequest.length);
-            responseReader = new StreamReader<>(this, socket, BUFFER_SIZE, chunkBuilder);
-            responseReader.readResponse();
-        } catch (SocketTimeoutException | HttpException e) {
-            invalidateObject(socket);
-            throw e;
-        } catch (IOException e) {
-            // Stale connection? Retry on a fresh socket
-            destroyObject(socket);
-            socket = createObject();
-            socket.writeFully(rawRequest, 0, rawRequest.length);
-            responseReader = new StreamReader<>(this, socket, BUFFER_SIZE, chunkBuilder);
-            responseReader.readResponse();
+            try {
+                socket.setTimeout(timeout == 0 ? readTimeout : timeout);
+                socket.writeFully(rawRequest, 0, rawRequest.length);
+                responseReader = new StreamReader(socket, BUFFER_SIZE);
+            } catch (SocketTimeoutException e) {
+                throw e;
+            } catch (IOException e) {
+                // Stale connection? Retry on a fresh socket
+                destroyObject(socket);
+                socket = createObject();
+                socket.writeFully(rawRequest, 0, rawRequest.length);
+                responseReader = new StreamReader(socket, BUFFER_SIZE);
+            }
+            Response response = responseReader.readResponse(method);
+            keepAlive = !"close".equalsIgnoreCase(response.getHeader("Connection: "));
+            streamConsumer.consume(responseReader);
+            return response;
+        } finally {
+            if (keepAlive) {
+                returnObject(socket);
+            } else {
+                invalidateObject(socket);
+            }
         }
-        return responseReader;
     }
 
-    interface ChunkBuilder<T> {
+    interface StreamConsumer {
 
-        T fromBytes(final byte[] bytes);
+        void consume(final StreamReader stream)
+            throws IOException, InterruptedException, PoolException, HttpException;
     }
 
-    static class StreamReader<T> implements Iterator<T>, Closeable {
+    static class StreamReader implements Iterator<byte[]> {
 
-        private final HttpClient client;
-        private final ChunkBuilder<T> chunkBuilder;
         private Socket socket;
         private byte[] buf;
         private int length;
@@ -79,22 +85,20 @@ public class StreamHttpClient extends HttpClient {
         private boolean lastChunkReaded;
         private byte[] chunk;
         private boolean isAvailable;
-        private boolean keepAlive;
         private Response response;
 
-        StreamReader(final HttpClient client, Socket socket, int bufferSize,
-            ChunkBuilder<T> chunkBuilder) throws IOException {
+        StreamReader(Socket socket, int bufferSize)
+            throws IOException {
             this.socket = socket;
             this.buf = new byte[bufferSize];
             this.length = socket.read(buf, 0, bufferSize, 0);
+            isAvailable = false;
             needRead = true;
             chunk = null;
             lastChunkReaded = false;
-            this.client = client;
-            this.chunkBuilder = chunkBuilder;
         }
 
-        void readResponse() throws IOException, HttpException {
+        Response readResponse(final int method) throws IOException, HttpException {
             String responseHeader = readLine();
             if (responseHeader.length() <= 9) {
                 throw new HttpException("Invalid response header: " + responseHeader);
@@ -104,37 +108,35 @@ public class StreamHttpClient extends HttpClient {
             for (String header; !(header = readLine()).isEmpty(); ) {
                 response.addHeader(header);
             }
-            keepAlive = !"close".equalsIgnoreCase(response.getHeader("Connection: "));
-            this.response = response;
-            if (response.getStatus() != 200 || !"chunked"
-                .equalsIgnoreCase(response.getHeader("Transfer-Encoding: "))) {
-                isAvailable = false;
-                close();
-                return;
+
+            if (method != Request.METHOD_HEAD && response.getStatus() != 204) {
+                String contentLength = response.getHeader("Content-Length: ");
+                if (contentLength != null) {
+                    byte[] body = new byte[Integer.parseInt(contentLength)];
+                    int contentBytes = length - pos;
+                    System.arraycopy(buf, pos, body, 0, contentBytes);
+                    if (contentBytes < body.length) {
+                        socket.readFully(body, contentBytes, body.length - contentBytes);
+                    }
+                    response.setBody(body);
+                } else if ("chunked".equalsIgnoreCase(response.getHeader("Transfer-Encoding: "))) {
+                    isAvailable = true;
+                } else {
+                    throw new HttpException("Content-Length unspecified");
+                }
             }
-            isAvailable = true;
+            this.response = response;
+            return response;
         }
 
         public Response getResponse() {
             return response;
         }
 
-        public boolean isAvailable() {
-            return isAvailable;
+        public boolean isNotAvailable() {
+            return !isAvailable;
         }
 
-        @Override
-        public void close() {
-            if (!isAvailable) {
-                return;
-            }
-            if (keepAlive) {
-                client.returnObject(socket);
-            } else {
-                client.invalidateObject(socket);
-            }
-            isAvailable = false;
-        }
 
         @Override
         public boolean hasNext() {
@@ -144,16 +146,15 @@ public class StreamHttpClient extends HttpClient {
             try {
                 readIfNeed();
             } catch (IOException | HttpException e) {
-                close();
                 return false;
             }
             return chunk != null;
         }
 
         @Override
-        public T next() {
+        public byte[] next() {
             needRead = true;
-            final var result = chunkBuilder.fromBytes(chunk);
+            final var result = chunk;
             chunk = null;
             return result;
         }
@@ -192,7 +193,6 @@ public class StreamHttpClient extends HttpClient {
             if (chunkSize == 0) {
                 readLine();
                 lastChunkReaded = true;
-                close();
                 return;
             }
 
