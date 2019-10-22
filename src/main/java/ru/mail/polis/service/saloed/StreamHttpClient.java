@@ -23,11 +23,11 @@ public class StreamHttpClient extends HttpClient {
     }
 
     /**
-     * Perform HTTP request, with expected response transfer encoding as chunked. Return iterator
-     * over response chunks.
+     * Perform HTTP request, with expected response transfer encoding as chunked.
      *
      * @param request HTTP request
-     * @return iterator over chunks
+     * @param streamConsumer consume iterator over response body
+     * @return response
      * @throws InterruptedException something bad happens
      * @throws PoolException        socket pool exception occurred
      * @throws IOException          if network error occurred
