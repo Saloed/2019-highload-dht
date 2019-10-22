@@ -1,9 +1,9 @@
-counter = 0
+require("init")
 
+local counter = 0
 request = function()
-    path = "/v0/entity?id=" .. counter
-    wrk.method = "PUT"
+    local path = "/v0/entity?id=" .. counter
     wrk.body   = counter
     counter = counter + 1
-    return wrk.format(nil, path)
+    return wrk.format("PUT", path)
 end
