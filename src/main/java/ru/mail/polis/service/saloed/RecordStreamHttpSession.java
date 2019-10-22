@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
+import ru.mail.polis.dao.IOExceptionLight;
 
 final class RecordStreamHttpSession extends HttpSession {
 
@@ -40,7 +41,7 @@ final class RecordStreamHttpSession extends HttpSession {
     void stream(final Iterator<Record> recordIterator) throws IOException {
         this.recordIterator = recordIterator;
         if (handling == null) {
-            throw new IOException("Out of order response");
+            throw new IOExceptionLight("Out of order response");
         }
         final var response = new Response(Response.OK);
         response.addHeader(keepAlive() ? "Connection: Keep-Alive" : "Connection: close");

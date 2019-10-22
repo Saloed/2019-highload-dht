@@ -109,6 +109,7 @@ public class StreamHttpClient extends HttpClient {
             if (response.getStatus() != 200 || !"chunked"
                 .equalsIgnoreCase(response.getHeader("Transfer-Encoding: "))) {
                 isAvailable = false;
+                close();
                 return;
             }
             isAvailable = true;
@@ -124,11 +125,15 @@ public class StreamHttpClient extends HttpClient {
 
         @Override
         public void close() {
+            if (!isAvailable) {
+                return;
+            }
             if (keepAlive) {
                 client.returnObject(socket);
             } else {
                 client.invalidateObject(socket);
             }
+            isAvailable = false;
         }
 
         @Override

@@ -28,6 +28,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.DAOWithTimestamp;
+import ru.mail.polis.dao.IOExceptionLight;
 import ru.mail.polis.service.Service;
 
 public final class ServiceImpl extends HttpServer implements Service {
@@ -228,11 +229,11 @@ public final class ServiceImpl extends HttpServer implements Service {
                     return Record.of(keyBytes, valueBytes);
                 });
                 if (iterator.getResponse().getStatus() != 200 || !iterator.isAvailable()) {
-                    throw new IOException("Unexpected response from node");
+                    throw new IOExceptionLight("Unexpected response from node");
                 }
                 iterators.add(iterator);
             } catch (InterruptedException | HttpException | PoolException e) {
-                throw new IOException("Exception while entities request", e);
+                throw new IOExceptionLight("Exception while entities request", e);
             }
 
         }
@@ -266,7 +267,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         try {
             return pool.get(node).invoke(request);
         } catch (InterruptedException | PoolException | HttpException e) {
-            throw new IOException("Error in proxy", e);
+            throw new IOExceptionLight("Error in proxy", e);
         }
     }
 
