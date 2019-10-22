@@ -122,7 +122,9 @@ public class StreamHttpClient extends HttpClient {
                         socket.readFully(body, contentBytes, body.length - contentBytes);
                     }
                     response.setBody(body);
-                } else if ("chunked".equalsIgnoreCase(response.getHeader("Transfer-Encoding: "))) {
+                    return response;
+                }
+                if ("chunked".equalsIgnoreCase(response.getHeader("Transfer-Encoding: "))) {
                     isAvailable = true;
                 } else {
                     throw new HttpException("Content-Length unspecified");
@@ -171,7 +173,6 @@ public class StreamHttpClient extends HttpClient {
         private String readLine() throws IOException, HttpException {
             final byte[] currentBuf = this.buf;
             int currentPos = this.pos;
-            final int lineStart = currentPos;
 
             do {
                 if (currentPos == length) {
@@ -183,6 +184,7 @@ public class StreamHttpClient extends HttpClient {
             }
             while (currentBuf[currentPos++] != '\n');
 
+            final int lineStart = this.pos;
             this.pos = currentPos;
             return Utf8.read(currentBuf, lineStart, currentPos - lineStart - 2);
         }
@@ -210,9 +212,9 @@ public class StreamHttpClient extends HttpClient {
                 System.arraycopy(buf, pos, chunk, 0, chunkSize);
                 pos += chunkSize;
                 if (pos + 128 >= buf.length) {
-                    final int length = this.length - pos;
-                    System.arraycopy(buf, pos, buf, 0, length);
-                    this.length = length;
+                    final int newLength = this.length - pos;
+                    System.arraycopy(buf, pos, buf, 0, newLength);
+                    this.length = newLength;
                     pos = 0;
                 }
             }
