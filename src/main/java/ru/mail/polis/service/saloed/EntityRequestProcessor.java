@@ -10,7 +10,7 @@ import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.RecordWithTimestamp;
 
-class EntityRequestProcessor {
+final class EntityRequestProcessor {
 
     private final Operation operation;
     private final DAOWithTimestamp dao;
@@ -20,7 +20,14 @@ class EntityRequestProcessor {
         this.dao = dao;
     }
 
-    public static EntityRequestProcessor forHttpMethod(
+    /**
+     * Returns processor for entity requests according to HTTP method.
+     *
+     * @param method HTTP method
+     * @param dao to access data
+     * @return entity processor
+     */
+    static EntityRequestProcessor forHttpMethod(
         final int method,
         final DAOWithTimestamp dao) {
         switch (method) {
@@ -36,23 +43,46 @@ class EntityRequestProcessor {
         }
     }
 
-
-    public Response processForService(
+    /**
+     * Process request for entity by service.
+     *
+     * @param timestamp of request
+     * @param key of entity
+     * @param requestBody body of request
+     * @return entity
+     * @throws IOException if errors with dao occurred
+     */
+    Response processForService(
         final long timestamp,
         @NotNull final ByteBuffer key,
         @Nullable final ByteBuffer requestBody) throws IOException {
         return process(RequestType.SERVICE, timestamp, key, requestBody);
     }
 
-
-    public Response processForUser(
+    /**
+     * Process request for entity by user.
+     *
+     * @param timestamp of request
+     * @param key of entity
+     * @param requestBody body of request
+     * @return entity
+     * @throws IOException if errors with dao occurred
+     */
+    Response processForUser(
         final long timestamp,
         @NotNull final ByteBuffer key,
         @Nullable final ByteBuffer requestBody) throws IOException {
         return process(RequestType.USER, timestamp, key, requestBody);
     }
 
-    public Response makeUserResponse(final Response serviceResponse) {
+    /**
+     * Translate response for service, which may contains RecordWithTimestamp,
+     * to user readable response.
+     *
+     * @param serviceResponse response from other node
+     * @return translated response
+     */
+    Response makeUserResponse(final Response serviceResponse) {
         if (operation != Operation.GET || serviceResponse.getStatus() != 200) {
             return serviceResponse;
         }

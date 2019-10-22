@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class Topology {
+public final class Topology {
 
     private static final int PART_SIZE = 1 << 22;
     private static final int PARTS_NUMBER = 1 << (Integer.SIZE - 22);

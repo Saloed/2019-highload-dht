@@ -201,7 +201,6 @@ public final class ServiceImpl extends HttpServer implements Service {
         return Long.parseLong(header);
     }
 
-
     @Override
     public HttpSession createSession(final Socket socket) throws RejectedSessionException {
         return new RecordStreamHttpSession(socket, this);
