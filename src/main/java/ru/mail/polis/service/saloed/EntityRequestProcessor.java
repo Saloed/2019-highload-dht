@@ -53,7 +53,7 @@ class EntityRequestProcessor {
     }
 
     public Response makeUserResponse(final Response serviceResponse) {
-        if (operation != Operation.GET) {
+        if (operation != Operation.GET || serviceResponse.getStatus() != 200) {
             return serviceResponse;
         }
         final var record = RecordWithTimestamp.fromBytes(serviceResponse.getBody());
