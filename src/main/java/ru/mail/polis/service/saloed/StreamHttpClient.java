@@ -1,5 +1,6 @@
 package ru.mail.polis.service.saloed;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.Iterator;
@@ -66,7 +67,7 @@ public class StreamHttpClient extends HttpClient {
         T fromBytes(final byte[] bytes);
     }
 
-    static class StreamReader<T> implements Iterator<T> {
+    static class StreamReader<T> implements Iterator<T>, Closeable {
 
         private final HttpClient client;
         private final ChunkBuilder<T> chunkBuilder;
@@ -121,7 +122,8 @@ public class StreamHttpClient extends HttpClient {
             return isAvailable;
         }
 
-        private void close() {
+        @Override
+        public void close() {
             if (keepAlive) {
                 client.returnObject(socket);
             } else {
