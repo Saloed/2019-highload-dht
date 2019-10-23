@@ -1,6 +1,8 @@
 package ru.mail.polis.dao;
 
-public class DAOException extends IOExceptionLight {
+import java.io.IOException;
+
+public class DAOException extends IOException {
 
     private static final long serialVersionUID = 6769829250639411882L;
 

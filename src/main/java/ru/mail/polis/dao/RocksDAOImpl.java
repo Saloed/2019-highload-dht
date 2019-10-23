@@ -14,7 +14,6 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
@@ -115,7 +114,6 @@ public class RocksDAOImpl implements DAOWithTimestamp {
         }
     }
 
-
     public static class RocksRecordIterator implements Iterator<Record>, Closeable {
 
         private final RocksIterator iterator;
@@ -146,7 +144,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
         }
 
         private void skipEmptyRecords() {
-            while (hasNext() && RecordWithTimestamp.recordIsEmpty(iterator.value())) {
+            while (iterator.isValid() && RecordWithTimestamp.recordIsEmpty(iterator.value())) {
                 iterator.next();
             }
         }

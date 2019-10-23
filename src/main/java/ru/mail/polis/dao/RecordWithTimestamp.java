@@ -103,11 +103,8 @@ public final class RecordWithTimestamp {
 
     /**
      * Serialize record to byte array.
-     * <p>
      * Format:
-     * <p>
      * |   timestamp  | mark (VALUE, TOMBSTONE, EMPTY)   |  value        |
-     * <p>
      * | -- 8 bytes --| ------------- 1 byte ------------| 0 - Inf bytes |
      *
      * @return serialized record
@@ -131,11 +128,11 @@ public final class RecordWithTimestamp {
 
         final byte value;
 
-        RecordType(byte value) {
+        RecordType(final byte value) {
             this.value = value;
         }
 
-        static RecordType fromValue(byte value) {
+        static RecordType fromValue(final byte value) {
             if (value == VALUE.value) {
                 return VALUE;
             } else if (value == TOMBSTONE.value) {

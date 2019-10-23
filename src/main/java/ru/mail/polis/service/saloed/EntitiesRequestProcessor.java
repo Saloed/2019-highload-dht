@@ -17,7 +17,7 @@ import ru.mail.polis.Record;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.IOExceptionLight;
 
-public class EntitiesRequestProcessor {
+final class EntitiesRequestProcessor {
 
     private final Topology topology;
     private final DAOWithTimestamp dao;
@@ -30,14 +30,14 @@ public class EntitiesRequestProcessor {
         this.pool = pool;
     }
 
-    public void processForService(
+    void processForService(
         @NotNull final ByteBuffer start,
         @Nullable final ByteBuffer end,
         final RecordStreamHttpSession streamSession) throws IOException {
         performSingleNode(start, end, streamSession);
     }
 
-    public void processForUser(
+    void processForUser(
         @NotNull final ByteBuffer start,
         @Nullable final ByteBuffer end,
         final Request request,
@@ -105,11 +105,11 @@ public class EntitiesRequestProcessor {
         final Request request;
         final RecordStreamHttpSession streamSession;
 
-        public ProcessorArguments(
-            final ByteBuffer start,
-            final ByteBuffer end,
-            final Request request,
-            final RecordStreamHttpSession streamSession) {
+        ProcessorArguments(
+                final ByteBuffer start,
+                final ByteBuffer end,
+                final Request request,
+                final RecordStreamHttpSession streamSession) {
 
             this.start = start;
             this.end = end;

@@ -11,6 +11,7 @@ import one.nio.net.ConnectionString;
 import one.nio.net.Socket;
 import one.nio.pool.PoolException;
 import one.nio.util.Utf8;
+import ru.mail.polis.dao.IOExceptionLight;
 
 public class StreamHttpClient extends HttpClient {
 
@@ -23,21 +24,21 @@ public class StreamHttpClient extends HttpClient {
     }
 
     /**
-     * Perform HTTP request, with expected response transfer encoding as chunked. Return iterator
-     * over response chunks.
+     * Perform HTTP request, with expected response transfer encoding as chunked.
      *
      * @param request HTTP request
-     * @return iterator over chunks
+     * @param streamConsumer consume iterator over response body
+     * @return response
      * @throws InterruptedException something bad happens
      * @throws PoolException        socket pool exception occurred
      * @throws IOException          if network error occurred
      * @throws HttpException        if http format exception occurred
      */
-    public synchronized Response invokeStream(final Request request,
-        final StreamConsumer streamConsumer)
-        throws InterruptedException, PoolException, IOException, HttpException {
-        int method = request.getMethod();
-        byte[] rawRequest = request.toBytes();
+    public synchronized Response invokeStream(
+        final Request request,
+        final StreamConsumer streamConsumer) throws InterruptedException, PoolException, IOException, HttpException {
+        final int method = request.getMethod();
+        final byte[] rawRequest = request.toBytes();
         StreamReader responseReader;
 
         Socket socket = borrowObject();
@@ -48,7 +49,7 @@ public class StreamHttpClient extends HttpClient {
                 socket.writeFully(rawRequest, 0, rawRequest.length);
                 responseReader = new StreamReader(socket, BUFFER_SIZE);
             } catch (SocketTimeoutException e) {
-                throw e;
+                throw new IOExceptionLight("Socket exception while reading stream", e);
             } catch (IOException e) {
                 // Stale connection? Retry on a fresh socket
                 destroyObject(socket);
@@ -56,7 +57,7 @@ public class StreamHttpClient extends HttpClient {
                 socket.writeFully(rawRequest, 0, rawRequest.length);
                 responseReader = new StreamReader(socket, BUFFER_SIZE);
             }
-            Response response = responseReader.readResponse(method);
+            final Response response = responseReader.readResponse(method);
             keepAlive = !"close".equalsIgnoreCase(response.getHeader("Connection: "));
             streamConsumer.consume(responseReader);
             return response;
@@ -77,8 +78,8 @@ public class StreamHttpClient extends HttpClient {
 
     static class StreamReader implements Iterator<byte[]> {
 
-        private Socket socket;
-        private byte[] buf;
+        private final Socket socket;
+        private final byte[] buf;
         private int length;
         private int pos;
         private boolean needRead;
@@ -87,7 +88,7 @@ public class StreamHttpClient extends HttpClient {
         private boolean isAvailable;
         private Response response;
 
-        StreamReader(Socket socket, int bufferSize)
+        StreamReader(final Socket socket, final int bufferSize)
             throws IOException {
             this.socket = socket;
             this.buf = new byte[bufferSize];
@@ -99,33 +100,36 @@ public class StreamHttpClient extends HttpClient {
         }
 
         Response readResponse(final int method) throws IOException, HttpException {
-            String responseHeader = readLine();
+            final String responseHeader = readLine();
             if (responseHeader.length() <= 9) {
                 throw new HttpException("Invalid response header: " + responseHeader);
             }
 
-            Response response = new Response(responseHeader.substring(9));
-            for (String header; !(header = readLine()).isEmpty(); ) {
+            response = new Response(responseHeader.substring(9));
+            while (true){
+                final String header = readLine();
+                if(header.isEmpty()) break;
                 response.addHeader(header);
             }
 
             if (method != Request.METHOD_HEAD && response.getStatus() != 204) {
-                String contentLength = response.getHeader("Content-Length: ");
+                final String contentLength = response.getHeader("Content-Length: ");
                 if (contentLength != null) {
-                    byte[] body = new byte[Integer.parseInt(contentLength)];
-                    int contentBytes = length - pos;
+                    final byte[] body = new byte[Integer.parseInt(contentLength)];
+                    final int contentBytes = length - pos;
                     System.arraycopy(buf, pos, body, 0, contentBytes);
                     if (contentBytes < body.length) {
                         socket.readFully(body, contentBytes, body.length - contentBytes);
                     }
                     response.setBody(body);
-                } else if ("chunked".equalsIgnoreCase(response.getHeader("Transfer-Encoding: "))) {
+                    return response;
+                }
+                if ("chunked".equalsIgnoreCase(response.getHeader("Transfer-Encoding: "))) {
                     isAvailable = true;
                 } else {
                     throw new HttpException("Content-Length unspecified");
                 }
             }
-            this.response = response;
             return response;
         }
 
@@ -136,7 +140,6 @@ public class StreamHttpClient extends HttpClient {
         public boolean isNotAvailable() {
             return !isAvailable;
         }
-
 
         @Override
         public boolean hasNext() {
@@ -168,28 +171,29 @@ public class StreamHttpClient extends HttpClient {
         }
 
         private String readLine() throws IOException, HttpException {
-            byte[] buf = this.buf;
-            int pos = this.pos;
-            int lineStart = pos;
+            final byte[] currentBuf = this.buf;
+            int currentPos = this.pos;
 
             do {
-                if (pos == length) {
-                    if (pos >= buf.length) {
+                if (currentPos == length) {
+                    if (currentPos >= currentBuf.length) {
                         throw new HttpException("Line too long");
                     }
-                    length += socket.read(buf, pos, buf.length - pos, 0);
+                    length += socket.read(currentBuf, currentPos, currentBuf.length - currentPos, 0);
                 }
-            } while (buf[pos++] != '\n');
+            }
+            while (currentBuf[currentPos++] != '\n');
 
-            this.pos = pos;
-            return Utf8.read(buf, lineStart, pos - lineStart - 2);
+            final int lineStart = this.pos;
+            this.pos = currentPos;
+            return Utf8.read(currentBuf, lineStart, currentPos - lineStart - 2);
         }
 
         private void readSingleChunk() throws IOException, HttpException {
             if (lastChunkReaded) {
                 return;
             }
-            int chunkSize = Integer.parseInt(readLine(), 16);
+            final int chunkSize = Integer.parseInt(readLine(), 16);
             if (chunkSize == 0) {
                 readLine();
                 lastChunkReaded = true;
@@ -198,7 +202,7 @@ public class StreamHttpClient extends HttpClient {
 
             chunk = new byte[chunkSize];
 
-            int contentBytes = length - pos;
+            final int contentBytes = length - pos;
             if (contentBytes < chunkSize) {
                 System.arraycopy(buf, pos, chunk, 0, contentBytes);
                 socket.readFully(chunk, contentBytes, chunkSize - contentBytes);
@@ -208,7 +212,9 @@ public class StreamHttpClient extends HttpClient {
                 System.arraycopy(buf, pos, chunk, 0, chunkSize);
                 pos += chunkSize;
                 if (pos + 128 >= buf.length) {
-                    System.arraycopy(buf, pos, buf, 0, length -= pos);
+                    final int newLength = this.length - pos;
+                    System.arraycopy(buf, pos, buf, 0, newLength);
+                    this.length = newLength;
                     pos = 0;
                 }
             }
