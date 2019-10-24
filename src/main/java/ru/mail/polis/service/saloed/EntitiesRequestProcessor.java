@@ -1,10 +1,12 @@
 package ru.mail.polis.service.saloed;
 
 import com.google.common.collect.Iterators;
+import com.google.common.primitives.Bytes;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -82,14 +84,12 @@ final class EntitiesRequestProcessor {
                     throw new IOExceptionLight("Unexpected response from node");
                 }
                 final var recordIterator = Iterators.transform(iterator, (bytes) -> {
-                    final var str = new String(bytes, StandardCharsets.UTF_8);
-                    final var firstDelimiter = str.indexOf('\n');
-                    final var keyStr = str.substring(0, firstDelimiter);
-                    final var valueStr = str.substring(firstDelimiter);
-                    final var keyBytes = ByteBuffer
-                        .wrap(keyStr.getBytes(StandardCharsets.UTF_8));
-                    final var valueBytes = ByteBuffer
-                        .wrap(valueStr.getBytes(StandardCharsets.UTF_8));
+                    final var delimiter = "\n".getBytes(StandardCharsets.UTF_8)[0];
+                    final var delimiterIdx = Bytes.indexOf(bytes, delimiter);
+                    final var keyByteArray = Arrays.copyOfRange(bytes, 0, delimiterIdx);
+                    final var valueByteArray = Arrays.copyOfRange(bytes, delimiterIdx + 1, bytes.length);
+                    final var keyBytes = ByteBuffer.wrap(keyByteArray);
+                    final var valueBytes = ByteBuffer .wrap(valueByteArray);
                     return Record.of(keyBytes, valueBytes);
                 });
                 iterators.add(recordIterator);
@@ -106,10 +106,10 @@ final class EntitiesRequestProcessor {
         final RecordStreamHttpSession streamSession;
 
         ProcessorArguments(
-                final ByteBuffer start,
-                final ByteBuffer end,
-                final Request request,
-                final RecordStreamHttpSession streamSession) {
+            final ByteBuffer start,
+            final ByteBuffer end,
+            final Request request,
+            final RecordStreamHttpSession streamSession) {
 
             this.start = start;
             this.end = end;
