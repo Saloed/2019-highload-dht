@@ -24,7 +24,7 @@ import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.service.saloed.ServiceImpl;
-import ru.mail.polis.service.saloed.Topology;
+import ru.mail.polis.service.saloed.ClusterNodeRouter;
 
 /**
  * Constructs {@link Service} instances.
@@ -64,8 +64,8 @@ public final class ServiceFactory {
         }
 
         final String me = "http://localhost:" + port;
-        final Topology clusterTopology = Topology.create(topology, me);
+        final var nodeRouter = ClusterNodeRouter.create(topology, me);
 
-        return ServiceImpl.create(port, (DAOWithTimestamp) dao, clusterTopology);
+        return ServiceImpl.create(port, (DAOWithTimestamp) dao, nodeRouter);
     }
 }

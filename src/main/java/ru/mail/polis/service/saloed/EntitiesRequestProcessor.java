@@ -21,13 +21,13 @@ import ru.mail.polis.dao.IOExceptionLight;
 
 final class EntitiesRequestProcessor {
 
-    private final Topology topology;
+    private final ClusterNodeRouter clusterNodeRouter;
     private final DAOWithTimestamp dao;
     private final Map<String, StreamHttpClient> pool;
 
-    EntitiesRequestProcessor(final Topology topology, final DAOWithTimestamp dao,
+    EntitiesRequestProcessor(final ClusterNodeRouter clusterNodeRouter, final DAOWithTimestamp dao,
         final Map<String, StreamHttpClient> pool) {
-        this.topology = topology;
+        this.clusterNodeRouter = clusterNodeRouter;
         this.dao = dao;
         this.pool = pool;
     }
@@ -45,7 +45,7 @@ final class EntitiesRequestProcessor {
         final Request request,
         final RecordStreamHttpSession streamSession) throws IOException {
         final var arguments = new ProcessorArguments(start, end, request, streamSession);
-        final var nodes = topology.allNodes().iterator();
+        final var nodes = clusterNodeRouter.allNodes().iterator();
         final var iterators = new ArrayList<Iterator<Record>>();
         try {
             performNestedProcessing(arguments, nodes, iterators);
@@ -73,7 +73,7 @@ final class EntitiesRequestProcessor {
             return;
         }
         final var node = nodes.next();
-        if (topology.isMe(node)) {
+        if (clusterNodeRouter.isMe(node)) {
             final var iterator = dao.range(arguments.start, arguments.end);
             iterators.add(iterator);
             performNestedProcessing(arguments, nodes, iterators);
