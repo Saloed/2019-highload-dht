@@ -17,6 +17,7 @@ import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.service.Service;
 import ru.mail.polis.service.saloed.EntityRequestProcessor.Arguments;
+import ru.mail.polis.service.saloed.EntityRequestProcessor.MaybeRecordWithTimestamp;
 import ru.mail.polis.service.saloed.UpsertEntityRequestProcessor.UpsertArguments;
 
 import java.io.IOException;
@@ -25,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -119,14 +121,14 @@ public final class ServiceImpl extends HttpServer implements Service {
             final EntityRequestProcessor processor,
             final EntityRequestProcessor.Arguments arguments,
             final HttpSession session) {
-        try {
-            final var result = processor.processLocal(arguments);
-            final var response = processor.makeResponseForService(result, arguments);
-            response(session, response);
-        } catch (IOException ex) {
-            log.error("Error while processing request", ex);
+        final var result = processor.processLocal(arguments);
+        if (result.isEmpty()) {
+            log.error("Error while processing request");
             response(session, Response.INTERNAL_ERROR);
+            return;
         }
+        final var response = processor.makeResponseForService(result.get(), arguments);
+        response(session, response);
     }
 
     private void processEntityForUser(
@@ -139,27 +141,25 @@ public final class ServiceImpl extends HttpServer implements Service {
         final var localNode = nodes.stream().filter(node -> node.isLocal()).findAny();
         final var remoteRequest = processor.preprocessRemote(request, arguments);
         final var remoteResponses = clusterNodeRouter.proxyRequest(remoteNodes, remoteRequest);
-        var localResult = Optional.empty();
-        if (localNode.isPresent()) {
-            try {
-                localResult = Optional.of(processor.processLocal(arguments));
-            } catch (IOException ex) {
-                localResult = Optional.empty();
-            }
-        }
-        final var remoteResults = remoteResponses.stream().map(response -> {
-            try {
-                return Optional.of(processor.obtainRemoteResult(response.get(), arguments));
-            } catch (InterruptedException | ExecutionException e) {
-                return Optional.empty();
-            }
-        });
+        final Optional<MaybeRecordWithTimestamp> localResult = localNode.isPresent() ? processor.processLocal(arguments) : Optional.empty();
+        final var remoteResults = remoteResponses.stream().map(response -> obtainRemoteResult(processor, arguments, response));
         final var allResults = Stream.concat(remoteResults, Stream.of(localResult))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toList());
         final var response = processor.makeResponseForUser(allResults, arguments);
         response(session, response);
+    }
+
+    private Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
+            final EntityRequestProcessor processor,
+            final EntityRequestProcessor.Arguments arguments,
+            final Future<Response> responseFuture) {
+        try {
+            return processor.obtainRemoteResult(responseFuture.get(), arguments);
+        } catch (InterruptedException | ExecutionException e) {
+            return Optional.empty();
+        }
     }
 
     private EntityRequestProcessor.Arguments parseEntityArguments(

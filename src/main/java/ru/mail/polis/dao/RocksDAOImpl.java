@@ -2,6 +2,7 @@ package ru.mail.polis.dao;
 
 import org.jetbrains.annotations.NotNull;
 
+import org.jetbrains.annotations.Nullable;
 import org.rocksdb.BuiltinComparator;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
@@ -29,8 +30,8 @@ public class RocksDAOImpl implements DAOWithTimestamp {
         RocksDB.loadLibrary();
         try {
             final var options = new Options()
-                .setCreateIfMissing(true)
-                .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
+                    .setCreateIfMissing(true)
+                    .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
             final var db = RocksDB.open(options, data.getAbsolutePath());
             return new RocksDAOImpl(db);
         } catch (RocksDBException exception) {
@@ -40,17 +41,22 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @NotNull
     @Override
-    public Iterator<Record> iterator(@NotNull final ByteBuffer from) throws IOException {
-        final var fromByteArray = ByteBufferUtils.toArrayShifted(from);
+    public Iterator<Record> iterator(@NotNull final ByteBuffer from) {
         final var iterator = db.newIterator();
-        iterator.seek(fromByteArray);
-        return new RocksRecordIterator(iterator);
+        return new RocksRecordIterator(iterator, from, null);
+    }
+
+    @NotNull
+    @Override
+    public Iterator<Record> range(@NotNull ByteBuffer from, @Nullable ByteBuffer to) {
+        final var iterator = db.newIterator();
+        return new RocksRecordIterator(iterator, from, to);
     }
 
     @NotNull
     @Override
     public ByteBuffer get(@NotNull final ByteBuffer key)
-        throws IOException, NoSuchElementException {
+            throws IOException, NoSuchElementException {
         final var record = getRecord(key);
         if (!record.isValue()) {
             throw new NoSuchElementExceptionLite("Key is not present: " + key.toString());
@@ -60,7 +66,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @Override
     public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value)
-        throws IOException {
+            throws IOException {
         final var record = RecordWithTimestamp.fromValue(value, System.currentTimeMillis());
         upsertRecord(key, record);
     }
@@ -104,7 +110,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @Override
     public void upsertRecord(@NotNull final ByteBuffer key,
-        @NotNull final RecordWithTimestamp record) throws IOException {
+                             @NotNull final RecordWithTimestamp record) throws IOException {
         final var keyBytes = ByteBufferUtils.toArrayShifted(key);
         final var valueBytes = record.toRawBytes();
         try {
@@ -114,45 +120,106 @@ public class RocksDAOImpl implements DAOWithTimestamp {
         }
     }
 
-    public static class RocksRecordIterator implements Iterator<Record>, Closeable {
+    @Override
+    public Iterator<RecordWithTimestampAndKey> recordRange(@NotNull ByteBuffer from, @Nullable ByteBuffer to) {
+        final var iterator = db.newIterator();
+        return new RocksRecordWithTimestampIterator(iterator, from, to);
+    }
 
+    public static abstract class RocksDAOIterator<T> implements Iterator<T>, Closeable {
         private final RocksIterator iterator;
+        @Nullable
+        private final ByteBuffer upperBound;
 
-        RocksRecordIterator(@NotNull final RocksIterator iterator) {
-            this.iterator = iterator;
-            skipEmptyRecords();
+        RocksDAOIterator(@NotNull final RocksIterator iterator, @NotNull final ByteBuffer lowerBound, @Nullable final ByteBuffer upperBound) {
+            this.iterator = initIterator(iterator, lowerBound);
+            final var upperBoundShifted = upperBound == null ? null : ByteBufferUtils.toArrayShifted(upperBound);
+            this.upperBound = upperBound == null ? null : ByteBuffer.wrap(upperBoundShifted);
+        }
+
+
+        public RocksIterator getIterator() {
+            return iterator;
+        }
+
+        @Override
+        public void close() {
+            iterator.close();
         }
 
         @Override
         public boolean hasNext() {
-            return iterator.isValid();
+            if (!iterator.isValid()) return false;
+            if (upperBound == null) return true;
+            final var key = ByteBuffer.wrap(iterator.key());
+            return key.compareTo(upperBound) < 0;
         }
 
         @Override
-        public Record next() {
+        public T next() {
             if (!hasNext()) {
                 throw new IllegalStateException("Iterator is exhausted");
             }
-            skipEmptyRecords();
-            final var keyByteArray = iterator.key();
-            final var valueByteArray = iterator.value();
-            final var key = ByteBufferUtils.fromArrayShifted(keyByteArray);
-            final var value = RecordWithTimestamp.fromBytes(valueByteArray).getValue();
-            final var record = Record.of(key, value);
+            final var record = construct(iterator.key(), iterator.value());
             iterator.next();
             return record;
         }
 
-        private void skipEmptyRecords() {
-            while (iterator.isValid() && RecordWithTimestamp.recordIsEmpty(iterator.value())) {
-                iterator.next();
-            }
+        protected abstract T construct(final byte[] key, final byte[] value);
+
+        private static RocksIterator initIterator(final RocksIterator iterator, final ByteBuffer lowerBound) {
+            final var fromByteArray = ByteBufferUtils.toArrayShifted(lowerBound);
+            iterator.seek(fromByteArray);
+            return iterator;
+        }
+
+    }
+
+    private static class RocksRecordWithTimestampIterator extends RocksDAOIterator<RecordWithTimestampAndKey> {
+
+        RocksRecordWithTimestampIterator(@NotNull final RocksIterator iterator, @NotNull final ByteBuffer lowerBound, @Nullable final ByteBuffer upperBound) {
+            super(iterator, lowerBound, upperBound);
         }
 
         @Override
-        public void close() throws IOException {
-            iterator.close();
+        protected RecordWithTimestampAndKey construct(byte[] key, byte[] value) {
+            final var keyBuffer = ByteBufferUtils.fromArrayShifted(key);
+            final var valueRecord = RecordWithTimestamp.fromBytes(value);
+            return RecordWithTimestampAndKey.fromKeyValue(keyBuffer, valueRecord);
         }
+    }
+
+    private static class RocksRecordIterator extends RocksDAOIterator<Record> {
+
+        private RocksRecordIterator(@NotNull final RocksIterator iterator, @NotNull final ByteBuffer lowerBound, @Nullable final ByteBuffer upperBound) {
+            super(iterator, lowerBound, upperBound);
+        }
+
+        @Override
+        public boolean hasNext() {
+            return super.hasNext();
+        }
+
+        @Override
+        public Record next() {
+            final var result = super.next();
+            skipEmptyRecords();
+            return result;
+        }
+
+        @Override
+        protected Record construct(byte[] key, byte[] value) {
+            final var keyBuffer = ByteBufferUtils.fromArrayShifted(key);
+            final var valueBuffer = RecordWithTimestamp.fromBytes(value).getValue();
+            return Record.of(keyBuffer, valueBuffer);
+        }
+
+        void skipEmptyRecords() {
+            while (getIterator().isValid() && RecordWithTimestamp.recordIsEmpty(getIterator().value())) {
+                getIterator().next();
+            }
+        }
+
     }
 
 }

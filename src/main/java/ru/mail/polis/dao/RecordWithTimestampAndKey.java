@@ -1,0 +1,53 @@
+package ru.mail.polis.dao;
+
+import org.jetbrains.annotations.NotNull;
+
+import java.nio.ByteBuffer;
+
+public class RecordWithTimestampAndKey implements Comparable<RecordWithTimestampAndKey> {
+    private final RecordWithTimestamp value;
+    private final ByteBuffer key;
+
+    private RecordWithTimestampAndKey(final RecordWithTimestamp value, final ByteBuffer key) {
+        this.value = value;
+        this.key = key;
+    }
+
+    @Override
+    public int compareTo(@NotNull final RecordWithTimestampAndKey other) {
+        final var keyComparison = key.compareTo(other.key);
+        return keyComparison == 0 ? Long.compare(value.getTimestamp(), other.value.getTimestamp()) : keyComparison;
+    }
+
+    public boolean sameKeyRecords(final RecordWithTimestampAndKey other) {
+        return key.equals(other.key);
+    }
+
+    public byte[] toRawBytes() {
+        final var valueBytes = value.toRawBytes();
+        final var keyBytes = ByteBufferUtils.toArray(key);
+        return ByteBuffer.allocate(Integer.BYTES + Integer.BYTES + keyBytes.length + valueBytes.length)
+                .putInt(keyBytes.length)
+                .putInt(valueBytes.length)
+                .put(keyBytes)
+                .put(valueBytes)
+                .array();
+    }
+
+    public static RecordWithTimestampAndKey fromRawBytes(final byte[] bytes) {
+        final var buffer = ByteBuffer.wrap(bytes);
+        final var keyLength = buffer.getInt();
+        final var valueLength = buffer.getInt();
+        final var key = new byte[keyLength];
+        final var value = new byte[valueLength];
+        buffer.get(key);
+        buffer.get(value);
+        final var valueRecord = RecordWithTimestamp.fromBytes(value);
+        return new RecordWithTimestampAndKey(valueRecord, ByteBuffer.wrap(key));
+    }
+
+    public static RecordWithTimestampAndKey fromKeyValue(final ByteBuffer key, final RecordWithTimestamp value) {
+        return new RecordWithTimestampAndKey(value, key);
+    }
+
+}

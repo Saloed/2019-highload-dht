@@ -1,16 +1,15 @@
 package ru.mail.polis.service.saloed;
 
-import java.io.IOException;
+import one.nio.http.Request;
+import one.nio.http.Response;
+import ru.mail.polis.dao.DAOWithTimestamp;
+import ru.mail.polis.dao.RecordWithTimestamp;
+
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
 
-import one.nio.http.Request;
-import one.nio.http.Response;
-import ru.mail.polis.dao.DAOWithTimestamp;
-import ru.mail.polis.service.saloed.EntityRequestProcessor.Arguments;
-
-abstract class EntityRequestProcessor<R, D extends Arguments> {
+abstract class EntityRequestProcessor {
 
     final DAOWithTimestamp dao;
 
@@ -41,19 +40,19 @@ abstract class EntityRequestProcessor<R, D extends Arguments> {
         }
     }
 
-    public Request preprocessRemote(Request request, D arguments) {
+    public Request preprocessRemote(Request request, Arguments arguments) {
         RequestUtils.setRequestFromService(request);
         RequestUtils.setRequestTimestamp(request, arguments.getTimestamp());
         return request;
     }
 
-    public abstract R processLocal(final D arguments) throws IOException;
+    public abstract Optional<MaybeRecordWithTimestamp> processLocal(final Arguments arguments);
 
-    public abstract Optional<R> obtainRemoteResult(final Response response, final D arguments);
+    public abstract Optional<MaybeRecordWithTimestamp> obtainRemoteResult(final Response response, final Arguments arguments);
 
-    public abstract Response makeResponseForUser(final List<R> data, final D arguments);
+    public abstract Response makeResponseForUser(final List<MaybeRecordWithTimestamp> data, final Arguments arguments);
 
-    public abstract Response makeResponseForService(final R data, final D arguments);
+    public abstract Response makeResponseForService(final MaybeRecordWithTimestamp data, final Arguments arguments);
 
     public static class Arguments {
 
@@ -98,12 +97,21 @@ abstract class EntityRequestProcessor<R, D extends Arguments> {
     }
 
 
-static class SuccessResult {
+    static class MaybeRecordWithTimestamp {
 
-    static final SuccessResult INSTANCE = new SuccessResult();
+        static final MaybeRecordWithTimestamp EMPTY = new MaybeRecordWithTimestamp(null);
+        private final RecordWithTimestamp record;
 
-    private SuccessResult() {
+        MaybeRecordWithTimestamp(final RecordWithTimestamp record) {
+            this.record = record;
+        }
+
+        public RecordWithTimestamp getRecord() {
+            if (record == null) {
+                throw new IllegalStateException("Record is not present");
+            }
+            return record;
+        }
     }
-}
 
 }

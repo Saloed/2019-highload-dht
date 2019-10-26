@@ -12,33 +12,39 @@ import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.RecordWithTimestamp;
 
 public class GetEntityRequestProcessor extends
-        EntityRequestProcessor<RecordWithTimestamp, EntityRequestProcessor.Arguments> {
+        EntityRequestProcessor {
 
     GetEntityRequestProcessor(final DAOWithTimestamp dao) {
         super(dao);
     }
 
     @Override
-    public RecordWithTimestamp processLocal(Arguments arguments)
-            throws IOException {
-        return dao.getRecord(arguments.getKey());
+    public Optional<MaybeRecordWithTimestamp> processLocal(Arguments arguments) {
+        try {
+            final var record = dao.getRecord(arguments.getKey());
+            final var maybe = new MaybeRecordWithTimestamp(record);
+            return Optional.of(maybe);
+        } catch (IOException e) {
+            return Optional.empty();
+        }
     }
 
     @Override
-    public Optional<RecordWithTimestamp> obtainRemoteResult(Response response, Arguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(Response response, Arguments arguments) {
         if (response.getStatus() != 200) {
             return Optional.empty();
         }
         final var record = RecordWithTimestamp.fromBytes(response.getBody());
-        return Optional.of(record);
+        return Optional.of(new MaybeRecordWithTimestamp(record));
     }
 
     @Override
-    public Response makeResponseForUser(List<RecordWithTimestamp> data, Arguments arguments) {
+    public Response makeResponseForUser(List<MaybeRecordWithTimestamp> data, Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.NOT_ENOUGH_REPLICAS;
         }
         final var notEmptyRecords = data.stream()
+                .map(MaybeRecordWithTimestamp::getRecord)
                 .filter(it -> !it.isEmpty())
                 .collect(Collectors.toList());
         if (notEmptyRecords.isEmpty()) {
@@ -55,8 +61,8 @@ public class GetEntityRequestProcessor extends
     }
 
     @Override
-    public Response makeResponseForService(RecordWithTimestamp data, Arguments arguments) {
-        return new Response(Response.OK, data.toRawBytes());
+    public Response makeResponseForService(MaybeRecordWithTimestamp data, Arguments arguments) {
+        return new Response(Response.OK, data.getRecord().toRawBytes());
     }
 
 }

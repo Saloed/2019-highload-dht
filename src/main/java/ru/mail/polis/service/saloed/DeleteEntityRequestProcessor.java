@@ -8,29 +8,33 @@ import one.nio.http.Response;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.RecordWithTimestamp;
 
-public class DeleteEntityRequestProcessor extends EntityRequestProcessor<EntityRequestProcessor.SuccessResult, EntityRequestProcessor.Arguments> {
+public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
 
     DeleteEntityRequestProcessor(final DAOWithTimestamp dao) {
         super(dao);
     }
 
     @Override
-    public SuccessResult processLocal(Arguments arguments) throws IOException {
+    public Optional<MaybeRecordWithTimestamp> processLocal(Arguments arguments) {
         final var record = RecordWithTimestamp.tombstone(arguments.getTimestamp());
-        dao.upsertRecord(arguments.getKey(), record);
-        return SuccessResult.INSTANCE;
+        try {
+            dao.upsertRecord(arguments.getKey(), record);
+            return Optional.of(MaybeRecordWithTimestamp.EMPTY);
+        } catch (IOException e) {
+            return Optional.empty();
+        }
     }
 
     @Override
-    public Optional<SuccessResult> obtainRemoteResult(Response response, Arguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(Response response, Arguments arguments) {
         if (response.getStatus() == 202) {
-            return Optional.of(SuccessResult.INSTANCE);
+            return Optional.of(MaybeRecordWithTimestamp.EMPTY);
         }
         return Optional.empty();
     }
 
     @Override
-    public Response makeResponseForUser(List<SuccessResult> data, Arguments arguments) {
+    public Response makeResponseForUser(List<MaybeRecordWithTimestamp> data, Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.NOT_ENOUGH_REPLICAS;
         }
@@ -38,9 +42,8 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor<EntityR
     }
 
     @Override
-    public Response makeResponseForService(SuccessResult data, Arguments arguments) {
+    public Response makeResponseForService(MaybeRecordWithTimestamp data, Arguments arguments) {
         return ResponseUtils.ACCEPTED;
     }
-
 
 }

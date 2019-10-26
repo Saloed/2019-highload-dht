@@ -10,31 +10,38 @@ import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.RecordWithTimestamp;
 
 public class UpsertEntityRequestProcessor extends
-        EntityRequestProcessor<EntityRequestProcessor.SuccessResult, UpsertEntityRequestProcessor.UpsertArguments> {
+        EntityRequestProcessor {
 
     UpsertEntityRequestProcessor(final DAOWithTimestamp dao) {
         super(dao);
     }
 
     @Override
-    public SuccessResult processLocal(UpsertArguments arguments)
-            throws IOException {
+    public Optional<MaybeRecordWithTimestamp> processLocal(Arguments arguments){
+        if(!(arguments instanceof UpsertArguments)){
+            throw new IllegalArgumentException("Upsert arguments expected");
+        }
+        final var upsertArguments = (UpsertArguments) arguments;
         final var record = RecordWithTimestamp
-                .fromValue(arguments.getValue(), arguments.getTimestamp());
-        dao.upsertRecord(arguments.getKey(), record);
-        return SuccessResult.INSTANCE;
+                .fromValue(upsertArguments.getValue(), arguments.getTimestamp());
+        try {
+            dao.upsertRecord(arguments.getKey(), record);
+        } catch (IOException ex){
+            return Optional.empty();
+        }
+        return Optional.of(MaybeRecordWithTimestamp.EMPTY);
     }
 
     @Override
-    public Optional<SuccessResult> obtainRemoteResult(Response response, UpsertArguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(Response response, Arguments arguments) {
         if (response.getStatus() == 201) {
-            return Optional.of(SuccessResult.INSTANCE);
+            return Optional.of(MaybeRecordWithTimestamp.EMPTY);
         }
         return Optional.empty();
     }
 
     @Override
-    public Response makeResponseForUser(List<SuccessResult> data, UpsertArguments arguments) {
+    public Response makeResponseForUser(List<MaybeRecordWithTimestamp> data, Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.NOT_ENOUGH_REPLICAS;
         }
@@ -42,10 +49,9 @@ public class UpsertEntityRequestProcessor extends
     }
 
     @Override
-    public Response makeResponseForService(SuccessResult data, UpsertArguments arguments) {
+    public Response makeResponseForService(MaybeRecordWithTimestamp data, Arguments arguments) {
         return ResponseUtils.CREATED;
     }
-
 
     public static class UpsertArguments extends EntityRequestProcessor.Arguments {
 
