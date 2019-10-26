@@ -3,15 +3,14 @@ package ru.mail.polis.service.saloed;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
-import one.nio.http.Request;
+
 import one.nio.http.Response;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.RecordWithTimestamp;
 
-public class DeleteEntityClusterTask extends
-    EntityClusterTask<SuccessResult, EntityClusterTask.Arguments> {
+public class DeleteEntityRequestProcessor extends EntityRequestProcessor<EntityRequestProcessor.SuccessResult, EntityRequestProcessor.Arguments> {
 
-    DeleteEntityClusterTask(final DAOWithTimestamp dao) {
+    DeleteEntityRequestProcessor(final DAOWithTimestamp dao) {
         super(dao);
     }
 
@@ -23,8 +22,7 @@ public class DeleteEntityClusterTask extends
     }
 
     @Override
-    public Optional<SuccessResult> obtainRemoteResult(Response response, Arguments arguments)
-        throws IOException {
+    public Optional<SuccessResult> obtainRemoteResult(Response response, Arguments arguments) {
         if (response.getStatus() == 202) {
             return Optional.of(SuccessResult.INSTANCE);
         }
@@ -32,8 +30,7 @@ public class DeleteEntityClusterTask extends
     }
 
     @Override
-    public Response makeResponseForUser(List<SuccessResult> data, Arguments arguments)
-        throws IOException {
+    public Response makeResponseForUser(List<SuccessResult> data, Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.NOT_ENOUGH_REPLICAS;
         }
@@ -41,8 +38,7 @@ public class DeleteEntityClusterTask extends
     }
 
     @Override
-    public Response makeResponseForService(SuccessResult data, Arguments arguments)
-        throws IOException {
+    public Response makeResponseForService(SuccessResult data, Arguments arguments) {
         return ResponseUtils.ACCEPTED;
     }
 

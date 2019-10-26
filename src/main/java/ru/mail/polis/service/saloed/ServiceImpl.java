@@ -1,20 +1,7 @@
 package ru.mail.polis.service.saloed;
 
-import static ru.mail.polis.service.saloed.RequestUtils.setRequestFromService;
-
 import com.google.common.collect.ImmutableMap;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.Map;
-import java.util.regex.Pattern;
-import one.nio.http.HttpServer;
-import one.nio.http.HttpServerConfig;
-import one.nio.http.HttpSession;
-import one.nio.http.Param;
-import one.nio.http.Path;
-import one.nio.http.Request;
-import one.nio.http.Response;
+import one.nio.http.*;
 import one.nio.net.Socket;
 import one.nio.server.AcceptorConfig;
 import one.nio.server.RejectedSessionException;
@@ -23,8 +10,20 @@ import org.apache.commons.logging.LogFactory;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.service.Service;
-import ru.mail.polis.service.saloed.EntityClusterTask.Arguments;
-import ru.mail.polis.service.saloed.UpsertEntityClusterTask.UpsertArguments;
+import ru.mail.polis.service.saloed.EntityRequestProcessor.Arguments;
+import ru.mail.polis.service.saloed.UpsertEntityRequestProcessor.UpsertArguments;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static ru.mail.polis.service.saloed.RequestUtils.setRequestFromService;
 
 public final class ServiceImpl extends HttpServer implements Service {
 
@@ -32,18 +31,18 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private final DAOWithTimestamp dao;
     private final ClusterNodeRouter clusterNodeRouter;
-    private final Map<Integer, EntityClusterTask> entityRequestProcessor;
+    private final Map<Integer, EntityRequestProcessor> entityRequestProcessor;
 
     private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao,
-        @NotNull final ClusterNodeRouter clusterNodeRouter)
-        throws IOException {
+                        @NotNull final ClusterNodeRouter clusterNodeRouter)
+            throws IOException {
         super(config);
         this.dao = dao;
         this.clusterNodeRouter = clusterNodeRouter;
         this.entityRequestProcessor = ImmutableMap.of(
-            Request.METHOD_GET, EntityClusterTask.forHttpMethod(Request.METHOD_GET, dao),
-            Request.METHOD_PUT, EntityClusterTask.forHttpMethod(Request.METHOD_PUT, dao),
-            Request.METHOD_DELETE, EntityClusterTask.forHttpMethod(Request.METHOD_DELETE, dao)
+                Request.METHOD_GET, EntityRequestProcessor.forHttpMethod(Request.METHOD_GET, dao),
+                Request.METHOD_PUT, EntityRequestProcessor.forHttpMethod(Request.METHOD_PUT, dao),
+                Request.METHOD_DELETE, EntityRequestProcessor.forHttpMethod(Request.METHOD_DELETE, dao)
         );
     }
 
@@ -57,8 +56,8 @@ public final class ServiceImpl extends HttpServer implements Service {
      * @throws IOException if something went wrong during server startup process
      */
     public static Service create(final int port, @NotNull final DAOWithTimestamp dao,
-        @NotNull final ClusterNodeRouter clusterNodeRouter)
-        throws IOException {
+                                 @NotNull final ClusterNodeRouter clusterNodeRouter)
+            throws IOException {
         final var acceptor = new AcceptorConfig();
         final var config = new HttpServerConfig();
         acceptor.port = port;
@@ -87,10 +86,10 @@ public final class ServiceImpl extends HttpServer implements Service {
      */
     @Path("/v0/entity")
     public void entity(
-        @Param("id") final String id,
-        @Param("replicas") final String replicas,
-        @NotNull final Request request,
-        @NotNull final HttpSession session) {
+            @Param("id") final String id,
+            @Param("replicas") final String replicas,
+            @NotNull final Request request,
+            @NotNull final HttpSession session) {
         if (id == null || id.isEmpty()) {
             response(session, Response.BAD_REQUEST, "Id is required");
             return;
@@ -102,29 +101,72 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
         final var arguments = parseEntityArguments(id, replicas, request);
         asyncExecute(() -> {
-            try {
-                final var response = clusterNodeRouter.executeClusterTask(
-                    arguments.getKey(), arguments.getReplicasFrom(),
-                    request, arguments, processor);
-                response(session, response);
-            } catch (IOException ex) {
-                log.error("Error while processing request", ex);
-                response(session, Response.INTERNAL_ERROR);
+            if (arguments.isServiceRequest()) {
+                processEntityForService(processor, arguments, session);
+            } else {
+                processEntityForUser(processor, arguments, request, session);
             }
         });
     }
 
-    private EntityClusterTask.Arguments parseEntityArguments(
-        final String id,
-        final String replicas,
-        final Request request) {
+    private void processEntityForService(
+            final EntityRequestProcessor processor,
+            final EntityRequestProcessor.Arguments arguments,
+            final HttpSession session) {
+        try {
+            final var result = processor.processLocal(arguments);
+            final var response = processor.makeResponseForService(result, arguments);
+            response(session, response);
+        } catch (IOException ex) {
+            log.error("Error while processing request", ex);
+            response(session, Response.INTERNAL_ERROR);
+        }
+    }
+
+    private void processEntityForUser(
+            final EntityRequestProcessor processor,
+            final EntityRequestProcessor.Arguments arguments,
+            final Request request,
+            final HttpSession session) {
+        final var nodes = clusterNodeRouter.selectNodes(arguments.getKey(), arguments.getReplicasFrom());
+        final var remoteNodes = nodes.stream().filter(node -> !node.isLocal()).collect(Collectors.toList());
+        final var localNode = nodes.stream().filter(node -> node.isLocal()).findAny();
+        final var remoteRequest = processor.preprocessRemote(request, arguments);
+        final var remoteResponses = clusterNodeRouter.proxyRequest(remoteNodes, remoteRequest);
+        var localResult = Optional.empty();
+        if (localNode.isPresent()) {
+            try {
+                localResult = Optional.of(processor.processLocal(arguments));
+            } catch (IOException ex) {
+                localResult = Optional.empty();
+            }
+        }
+        final var remoteResults = remoteResponses.stream().map(response -> {
+            try {
+                return Optional.of(processor.obtainRemoteResult(response.get(), arguments));
+            } catch (InterruptedException | ExecutionException e) {
+                return Optional.empty();
+            }
+        });
+        final var allResults = Stream.concat(remoteResults, Stream.of(localResult))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toList());
+        final var response = processor.makeResponseForUser(allResults, arguments);
+        response(session, response);
+    }
+
+    private EntityRequestProcessor.Arguments parseEntityArguments(
+            final String id,
+            final String replicas,
+            final Request request) {
         final var timestamp = RequestUtils.getRequestTimestamp(request);
         final var isServiceRequest = RequestUtils.isRequestFromService(request);
         final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
         int replicasAck;
         int replicasFrom;
         final var matcher = Pattern.compile("(\\d+)/(\\d+)")
-            .matcher(replicas == null ? "" : replicas);
+                .matcher(replicas == null ? "" : replicas);
         if (matcher.find()) {
             replicasAck = Integer.parseInt(matcher.group(1));
             replicasFrom = Integer.parseInt(matcher.group(2));
@@ -135,10 +177,10 @@ public final class ServiceImpl extends HttpServer implements Service {
         if (request.getMethod() == Request.METHOD_PUT) {
             final var body = ByteBuffer.wrap(request.getBody());
             return new UpsertArguments(key, body, isServiceRequest, timestamp, replicasAck,
-                replicasFrom);
+                    replicasFrom);
         }
         return new Arguments(key, isServiceRequest, timestamp, replicasAck,
-            replicasFrom);
+                replicasFrom);
     }
 
     /**
@@ -150,10 +192,10 @@ public final class ServiceImpl extends HttpServer implements Service {
      */
     @Path("/v0/entities")
     public void entities(
-        @Param("start") final String start,
-        @Param("end") final String end,
-        @NotNull final Request request,
-        @NotNull final HttpSession session) {
+            @Param("start") final String start,
+            @Param("end") final String end,
+            @NotNull final Request request,
+            @NotNull final HttpSession session) {
         if (start == null || start.isEmpty()) {
             response(session, Response.BAD_REQUEST, "Start parameter is required");
             return;
@@ -165,9 +207,9 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
         final var finalEndBytes = endBytes;
         final var streamSession = (RecordStreamHttpSession) session;
-        final var isServiceRequest = isRequestFromService(request);
+        final var isServiceRequest = RequestUtils.isRequestFromService(request);
         asyncExecute(() -> {
-            final var processor = new EntitiesRequestProcessor(clusterNodeRouter, dao, pool);
+            final var processor = new EntitiesRequestProcessor(clusterNodeRouter, dao);
             try {
                 if (isServiceRequest) {
                     processor.processForService(startBytes, finalEndBytes, streamSession);
@@ -196,7 +238,7 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     private void response(final HttpSession session, final String resultCode,
-        final String message) {
+                          final String message) {
         final var messageBytes = message.getBytes(StandardCharsets.UTF_8);
         response(session, resultCode, messageBytes);
     }

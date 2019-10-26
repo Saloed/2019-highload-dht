@@ -23,13 +23,10 @@ final class EntitiesRequestProcessor {
 
     private final ClusterNodeRouter clusterNodeRouter;
     private final DAOWithTimestamp dao;
-    private final Map<String, StreamHttpClient> pool;
 
-    EntitiesRequestProcessor(final ClusterNodeRouter clusterNodeRouter, final DAOWithTimestamp dao,
-        final Map<String, StreamHttpClient> pool) {
+    EntitiesRequestProcessor(final ClusterNodeRouter clusterNodeRouter, final DAOWithTimestamp dao) {
         this.clusterNodeRouter = clusterNodeRouter;
         this.dao = dao;
-        this.pool = pool;
     }
 
     void processForService(
@@ -64,7 +61,7 @@ final class EntitiesRequestProcessor {
 
     private void performNestedProcessing(
         final ProcessorArguments arguments,
-        final Iterator<String> nodes,
+        final Iterator<ClusterNodeRouter.ClusterNode> nodes,
         final List<Iterator<Record>> iterators)
         throws IOException, InterruptedException, HttpException, PoolException {
         if (!nodes.hasNext()) {
@@ -73,12 +70,12 @@ final class EntitiesRequestProcessor {
             return;
         }
         final var node = nodes.next();
-        if (clusterNodeRouter.isMe(node)) {
+        if (node.isLocal()) {
             final var iterator = dao.range(arguments.start, arguments.end);
             iterators.add(iterator);
             performNestedProcessing(arguments, nodes, iterators);
         } else {
-            final var client = pool.get(node);
+            final var client = node.getHttpClient();
             client.invokeStream(arguments.request, iterator -> {
                 if (iterator.getResponse().getStatus() != 200 || iterator.isNotAvailable()) {
                     throw new IOExceptionLight("Unexpected response from node");
