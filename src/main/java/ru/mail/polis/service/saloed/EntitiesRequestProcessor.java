@@ -2,14 +2,6 @@ package ru.mail.polis.service.saloed;
 
 import com.google.common.collect.Iterators;
 import com.google.common.primitives.Bytes;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 import one.nio.http.HttpException;
 import one.nio.http.Request;
 import one.nio.pool.PoolException;
@@ -18,6 +10,14 @@ import org.jetbrains.annotations.Nullable;
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.IOExceptionLight;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
 
 final class EntitiesRequestProcessor {
 
