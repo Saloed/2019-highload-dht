@@ -140,7 +140,7 @@ public final class ClusterNodeRouter {
      *
      * @return all nodes
      */
-    List<ClusterNode> allNodes() {
+    public List<ClusterNode> allNodes() {
         return new ArrayList<>(nodes);
     }
 
@@ -190,7 +190,7 @@ public final class ClusterNodeRouter {
             this.httpClient = httpClient;
         }
 
-        boolean isLocal() {
+        public boolean isLocal() {
             return type == ClusterNodeType.LOCAL;
         }
 
@@ -200,7 +200,7 @@ public final class ClusterNodeRouter {
             return new ClusterNodeIterator(this);
         }
 
-        StreamHttpClient getHttpClient() {
+        public StreamHttpClient getHttpClient() {
             return httpClient;
         }
 

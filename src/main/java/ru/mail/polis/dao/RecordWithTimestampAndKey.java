@@ -19,6 +19,18 @@ public class RecordWithTimestampAndKey implements Comparable<RecordWithTimestamp
         return keyComparison == 0 ? Long.compare(value.getTimestamp(), other.value.getTimestamp()) : keyComparison;
     }
 
+    public boolean isEmpty() {
+        return !value.isValue();
+    }
+
+    public ByteBuffer getValue() {
+        return value.getValue();
+    }
+
+    public ByteBuffer getKey() {
+        return key;
+    }
+
     public boolean sameKeyRecords(final RecordWithTimestampAndKey other) {
         return key.equals(other.key);
     }

@@ -10,15 +10,17 @@ import one.nio.http.Request;
 import one.nio.http.Response;
 import one.nio.net.Socket;
 import one.nio.server.AcceptorConfig;
-import one.nio.server.RejectedSessionException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.service.Service;
-import ru.mail.polis.service.saloed.EntityRequestProcessor.Arguments;
-import ru.mail.polis.service.saloed.EntityRequestProcessor.MaybeRecordWithTimestamp;
-import ru.mail.polis.service.saloed.UpsertEntityRequestProcessor.UpsertArguments;
+import ru.mail.polis.service.saloed.request.processor.EntitiesRequestProcessor;
+import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
+import ru.mail.polis.service.saloed.request.processor.entity.Arguments;
+import ru.mail.polis.service.saloed.request.processor.entity.MaybeRecordWithTimestamp;
+import ru.mail.polis.service.saloed.request.processor.entity.UpsertArguments;
+import ru.mail.polis.service.saloed.request.RequestUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -31,7 +33,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static ru.mail.polis.service.saloed.RequestUtils.setRequestFromService;
+import static ru.mail.polis.service.saloed.request.RequestUtils.setRequestFromService;
 
 public final class ServiceImpl extends HttpServer implements Service {
 
@@ -119,7 +121,7 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private void processEntityForService(
             final EntityRequestProcessor processor,
-            final EntityRequestProcessor.Arguments arguments,
+            final Arguments arguments,
             final HttpSession session) {
         final var result = processor.processLocal(arguments);
         if (result.isEmpty()) {
@@ -133,7 +135,7 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private void processEntityForUser(
             final EntityRequestProcessor processor,
-            final EntityRequestProcessor.Arguments arguments,
+            final Arguments arguments,
             final Request request,
             final HttpSession session) {
         final var nodes = clusterNodeRouter.selectNodes(arguments.getKey(), arguments.getReplicasFrom());
@@ -153,7 +155,7 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
             final EntityRequestProcessor processor,
-            final EntityRequestProcessor.Arguments arguments,
+            final Arguments arguments,
             final Future<Response> responseFuture) {
         try {
             return processor.obtainRemoteResult(responseFuture.get(), arguments);
@@ -162,7 +164,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
     }
 
-    private EntityRequestProcessor.Arguments parseEntityArguments(
+    private Arguments parseEntityArguments(
             final String id,
             final String replicas,
             final Request request) {
@@ -212,7 +214,7 @@ public final class ServiceImpl extends HttpServer implements Service {
             endBytes = ByteBuffer.wrap(end.getBytes(StandardCharsets.UTF_8));
         }
         final var finalEndBytes = endBytes;
-        final var streamSession = (RecordStreamHttpSession) session;
+        final var streamSession = (StreamHttpSession) session;
         final var isServiceRequest = RequestUtils.isRequestFromService(request);
         asyncExecute(() -> {
             final var processor = new EntitiesRequestProcessor(clusterNodeRouter, dao);
@@ -230,8 +232,8 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     @Override
-    public HttpSession createSession(final Socket socket) throws RejectedSessionException {
-        return new RecordStreamHttpSession(socket, this);
+    public HttpSession createSession(final Socket socket) {
+        return new StreamHttpSession(socket, this);
     }
 
     @Override

@@ -1,18 +1,19 @@
-package ru.mail.polis.service.saloed;
+package ru.mail.polis.service.saloed.request.processor.entity;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
 
 import one.nio.http.Response;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.RecordWithTimestamp;
+import ru.mail.polis.service.saloed.request.ResponseUtils;
+import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
 
 public class UpsertEntityRequestProcessor extends
         EntityRequestProcessor {
 
-    UpsertEntityRequestProcessor(final DAOWithTimestamp dao) {
+    public UpsertEntityRequestProcessor(final DAOWithTimestamp dao) {
         super(dao);
     }
 
@@ -51,26 +52,6 @@ public class UpsertEntityRequestProcessor extends
     @Override
     public Response makeResponseForService(MaybeRecordWithTimestamp data, Arguments arguments) {
         return ResponseUtils.CREATED;
-    }
-
-    public static class UpsertArguments extends EntityRequestProcessor.Arguments {
-
-        private final ByteBuffer value;
-
-        UpsertArguments(
-                final ByteBuffer key,
-                final ByteBuffer value,
-                final boolean serviceRequest,
-                final long timestamp,
-                final int replicasAck,
-                final int replicasFrom) {
-            super(key, serviceRequest, timestamp, replicasAck, replicasFrom);
-            this.value = value;
-        }
-
-        public ByteBuffer getValue() {
-            return value;
-        }
     }
 
 }

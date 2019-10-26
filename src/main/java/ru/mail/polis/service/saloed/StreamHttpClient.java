@@ -70,13 +70,13 @@ public class StreamHttpClient extends HttpClient {
         }
     }
 
-    interface StreamConsumer {
+   public interface StreamConsumer {
 
         void consume(final StreamReader stream)
             throws IOException, InterruptedException, PoolException, HttpException;
     }
 
-    static class StreamReader implements Iterator<byte[]> {
+    public static class StreamReader implements Iterator<byte[]> {
 
         private final Socket socket;
         private final byte[] buf;

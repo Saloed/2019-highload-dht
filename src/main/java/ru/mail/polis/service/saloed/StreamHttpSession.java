@@ -4,31 +4,27 @@ import one.nio.http.HttpServer;
 import one.nio.http.HttpSession;
 import one.nio.http.Response;
 import one.nio.net.Socket;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
-import ru.mail.polis.Record;
-import ru.mail.polis.dao.ByteBufferUtils;
+import ru.mail.polis.dao.IOExceptionLight;
+import ru.mail.polis.service.saloed.payload.Payload;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
-import ru.mail.polis.dao.IOExceptionLight;
 
-final class RecordStreamHttpSession extends HttpSession {
+public final class StreamHttpSession extends HttpSession {
 
-    private static final Log log = LogFactory.getLog(RecordStreamHttpSession.class);
+    private static final Log log = LogFactory.getLog(StreamHttpSession.class);
 
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.UTF_8);
-    private static final byte[] DELIMITER = "\n".getBytes(StandardCharsets.UTF_8);
     private static final byte[] EMPTY = "0\r\n\r\n".getBytes(StandardCharsets.UTF_8);
 
-    private Iterator<Record> recordIterator;
+    private Iterator<Payload> recordIterator;
 
-    RecordStreamHttpSession(final Socket socket, final HttpServer server) {
+    StreamHttpSession(final Socket socket, final HttpServer server) {
         super(socket, server);
     }
 
@@ -38,7 +34,7 @@ final class RecordStreamHttpSession extends HttpSession {
      * @param recordIterator with data
      * @throws IOException if network errors occurred
      */
-    synchronized void stream(final Iterator<Record> recordIterator) throws IOException {
+    public synchronized void stream(final Iterator<Payload> recordIterator) throws IOException {
         this.recordIterator = recordIterator;
         if (handling == null) {
             throw new IOExceptionLight("Out of order response");
@@ -58,22 +54,17 @@ final class RecordStreamHttpSession extends HttpSession {
         next();
     }
 
-    private void writeRecord(final Record record) throws IOException {
-        final var key = ByteBufferUtils.toArray(record.getKey());
-        final var value = ByteBufferUtils.toArray(record.getValue());
-
-        final var payloadLength = key.length + DELIMITER.length + value.length;
+    private void writeRecord(final Payload record) throws IOException {
+        final var payload = record.toRawBytes();
+        final var payloadLength = payload.length;
         final var payloadLengthHex = Integer.toHexString(payloadLength);
-        final var chunkLength =
-            payloadLengthHex.length() + CRLF.length + payloadLength + CRLF.length;
+        final var chunkLength = payloadLengthHex.length() + CRLF.length + payloadLength + CRLF.length;
 
         final var chunk = new byte[chunkLength];
         final var chunkBuffer = ByteBuffer.wrap(chunk);
         chunkBuffer.put(payloadLengthHex.getBytes(StandardCharsets.UTF_8));
         chunkBuffer.put(CRLF);
-        chunkBuffer.put(key);
-        chunkBuffer.put(DELIMITER);
-        chunkBuffer.put(value);
+        chunkBuffer.put(payload);
         chunkBuffer.put(CRLF);
 
         write(chunk, 0, chunk.length);

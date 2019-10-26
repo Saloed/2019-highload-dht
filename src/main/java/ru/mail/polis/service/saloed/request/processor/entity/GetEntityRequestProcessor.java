@@ -1,4 +1,4 @@
-package ru.mail.polis.service.saloed;
+package ru.mail.polis.service.saloed.request.processor.entity;
 
 import java.io.IOException;
 import java.util.Comparator;
@@ -10,11 +10,13 @@ import one.nio.http.Response;
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.dao.RecordWithTimestamp;
+import ru.mail.polis.service.saloed.request.ResponseUtils;
+import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
 
 public class GetEntityRequestProcessor extends
         EntityRequestProcessor {
 
-    GetEntityRequestProcessor(final DAOWithTimestamp dao) {
+    public GetEntityRequestProcessor(final DAOWithTimestamp dao) {
         super(dao);
     }
 

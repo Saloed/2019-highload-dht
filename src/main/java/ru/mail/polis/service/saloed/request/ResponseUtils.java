@@ -1,4 +1,4 @@
-package ru.mail.polis.service.saloed;
+package ru.mail.polis.service.saloed.request;
 
 import one.nio.http.Response;
 

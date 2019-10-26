@@ -1,0 +1,23 @@
+package ru.mail.polis.service.saloed.request.processor.entity;
+
+import java.nio.ByteBuffer;
+
+public class UpsertArguments extends Arguments {
+
+    private final ByteBuffer value;
+
+    public UpsertArguments(
+            final ByteBuffer key,
+            final ByteBuffer value,
+            final boolean serviceRequest,
+            final long timestamp,
+            final int replicasAck,
+            final int replicasFrom) {
+        super(key, serviceRequest, timestamp, replicasAck, replicasFrom);
+        this.value = value;
+    }
+
+    public ByteBuffer getValue() {
+        return value;
+    }
+}
