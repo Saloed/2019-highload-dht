@@ -193,6 +193,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
         private RocksRecordIterator(@NotNull final RocksIterator iterator, @NotNull final ByteBuffer lowerBound, @Nullable final ByteBuffer upperBound) {
             super(iterator, lowerBound, upperBound);
+            skipEmptyRecords();
         }
 
         @Override
