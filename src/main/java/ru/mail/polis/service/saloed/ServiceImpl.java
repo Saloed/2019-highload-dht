@@ -15,12 +15,12 @@ import org.apache.commons.logging.LogFactory;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.DAOWithTimestamp;
 import ru.mail.polis.service.Service;
+import ru.mail.polis.service.saloed.request.RequestUtils;
 import ru.mail.polis.service.saloed.request.processor.EntitiesRequestProcessor;
 import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
 import ru.mail.polis.service.saloed.request.processor.entity.Arguments;
 import ru.mail.polis.service.saloed.request.processor.entity.MaybeRecordWithTimestamp;
 import ru.mail.polis.service.saloed.request.processor.entity.UpsertArguments;
-import ru.mail.polis.service.saloed.request.RequestUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -158,8 +160,8 @@ public final class ServiceImpl extends HttpServer implements Service {
             final Arguments arguments,
             final Future<Response> responseFuture) {
         try {
-            return processor.obtainRemoteResult(responseFuture.get(), arguments);
-        } catch (InterruptedException | ExecutionException e) {
+            return processor.obtainRemoteResult(responseFuture.get(100, TimeUnit.MILLISECONDS), arguments);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
             return Optional.empty();
         }
     }

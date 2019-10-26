@@ -170,6 +170,7 @@ public final class ClusterNodeRouter {
             if (nodeCount >= replicas) {
                 break;
             }
+            nodeCount++;
             result.add(node);
         }
         return result;
