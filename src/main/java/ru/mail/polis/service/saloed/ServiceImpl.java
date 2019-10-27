@@ -41,6 +41,8 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     private static final Log log = LogFactory.getLog(ServiceImpl.class);
 
+    private static final Pattern REPLICAS_PATTERN = Pattern.compile("(\\d+)/(\\d+)");
+
     private final DAOWithTimestamp dao;
     private final ClusterNodeRouter clusterNodeRouter;
     private final Map<Integer, EntityRequestProcessor> entityRequestProcessor;
@@ -102,16 +104,16 @@ public final class ServiceImpl extends HttpServer implements Service {
             @Param("replicas") final String replicas,
             @NotNull final Request request,
             @NotNull final HttpSession session) {
-        if (id == null || id.isEmpty()) {
-            response(session, Response.BAD_REQUEST, "Id is required");
-            return;
-        }
         final var processor = entityRequestProcessor.get(request.getMethod());
         if (processor == null) {
             response(session, Response.METHOD_NOT_ALLOWED);
             return;
         }
         final var arguments = parseEntityArguments(id, replicas, request);
+        if (arguments == null) {
+            response(session, Response.BAD_REQUEST);
+            return;
+        }
         asyncExecute(() -> {
             if (arguments.isServiceRequest()) {
                 processEntityForService(processor, arguments, session);
@@ -170,13 +172,12 @@ public final class ServiceImpl extends HttpServer implements Service {
             final String id,
             final String replicas,
             final Request request) {
-        final var timestamp = RequestUtils.getRequestTimestamp(request);
-        final var isServiceRequest = RequestUtils.isRequestFromService(request);
-        final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
+        if (id == null || id.isEmpty()) {
+            return null;
+        }
         int replicasAck;
         int replicasFrom;
-        final var matcher = Pattern.compile("(\\d+)/(\\d+)")
-                .matcher(replicas == null ? "" : replicas);
+        final var matcher = REPLICAS_PATTERN.matcher(replicas == null ? "" : replicas);
         if (matcher.find()) {
             replicasAck = Integer.parseInt(matcher.group(1));
             replicasFrom = Integer.parseInt(matcher.group(2));
@@ -184,6 +185,12 @@ public final class ServiceImpl extends HttpServer implements Service {
             replicasAck = clusterNodeRouter.getDefaultReplicasAck();
             replicasFrom = clusterNodeRouter.getDefaultReplicasFrom();
         }
+        if (replicasFrom > clusterNodeRouter.getDefaultReplicasFrom() || replicasAck > replicasFrom || replicasAck < 1) {
+            return null;
+        }
+        final var timestamp = RequestUtils.getRequestTimestamp(request);
+        final var isServiceRequest = RequestUtils.isRequestFromService(request);
+        final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
         if (request.getMethod() == Request.METHOD_PUT) {
             final var body = ByteBuffer.wrap(request.getBody());
             return new UpsertArguments(key, body, isServiceRequest, timestamp, replicasAck,
