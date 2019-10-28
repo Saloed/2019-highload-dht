@@ -1,8 +1,28 @@
 package ru.mail.polis.service.saloed;
 
-import com.google.common.collect.*;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeMap;
+import com.google.common.collect.Streams;
+import com.google.common.collect.TreeRangeMap;
 import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import one.nio.http.HttpException;
 import one.nio.http.Request;
 import one.nio.http.Response;
@@ -11,19 +31,8 @@ import one.nio.pool.PoolException;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.IOExceptionLight;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+public final class ClusterNodeRouter implements Closeable {
 
-public final class ClusterNodeRouter {
     private static final int TIMEOUT = 100;
     private static final int PART_SIZE = 1 << 22;
     private static final int PARTS_NUMBER = 1 << (Integer.SIZE - 22);
@@ -45,28 +54,28 @@ public final class ClusterNodeRouter {
      * @return topology
      */
     public static ClusterNodeRouter create(
-            @NotNull final Set<String> topology,
-            @NotNull final String me) {
+        @NotNull final Set<String> topology,
+        @NotNull final String me) {
         if (!topology.contains(me)) {
             throw new IllegalArgumentException("Me is not part of topology");
         }
         final var nodes = topology.stream()
-                .sorted()
-                .map(node -> {
-                    final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
-                    final var httpClient = createHttpClient(type, node);
-                    return new ClusterNode(type, httpClient);
-                })
-                .collect(Collectors.toList());
+            .sorted()
+            .map(node -> {
+                final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
+                final var httpClient = createHttpClient(type, node);
+                return new ClusterNode(type, httpClient);
+            })
+            .collect(Collectors.toList());
         final var nextStream = Streams.concat(
-                nodes.subList(1, nodes.size()).stream(),
-                Stream.of(nodes.get(0)));
+            nodes.subList(1, nodes.size()).stream(),
+            Stream.of(nodes.get(0)));
         final var currentStream = nodes.stream();
         final var nodesChained = Streams.zip(
-                currentStream,
-                nextStream,
-                (current, next) -> current.next = next)
-                .collect(Collectors.toList());
+            currentStream,
+            nextStream,
+            (current, next) -> current.next = next)
+            .collect(Collectors.toList());
 
         final var threadFactory = new ThreadFactoryBuilder().setNameFormat("node-router").build();
         final var workersPool = Executors.newFixedThreadPool(nodes.size(), threadFactory);
@@ -74,7 +83,7 @@ public final class ClusterNodeRouter {
     }
 
     private static StreamHttpClient createHttpClient(final ClusterNodeType type,
-                                                     final String node) {
+        final String node) {
         if (type == ClusterNodeType.LOCAL) {
             return null;
         }
@@ -98,15 +107,15 @@ public final class ClusterNodeRouter {
     private int hash(final ByteBuffer key) {
         final var keyCopy = key.duplicate();
         return Hashing.sha256()
-                .newHasher(keyCopy.remaining())
-                .putBytes(keyCopy)
-                .hash()
-                .asInt();
+            .newHasher(keyCopy.remaining())
+            .putBytes(keyCopy)
+            .hash()
+            .asInt();
     }
 
     private Response proxySingleRequest(
-            final ClusterNode node,
-            final Request request
+        final ClusterNode node,
+        final Request request
     ) throws IOException {
         try {
             return node.getHttpClient().invoke(request);
@@ -115,23 +124,31 @@ public final class ClusterNodeRouter {
         }
     }
 
-    public Future<Response> proxyRequest(final ClusterNode node, final Request request) {
-        return workersPool.submit(() -> proxySingleRequest(node, request));
-    }
-
     List<Future<Response>> proxyRequest(final List<ClusterNode> nodes, final Request request) {
         return nodes.stream()
-                .filter(node -> !node.isLocal())
-                .map(node -> this.workersPool.submit(() -> proxySingleRequest(node, request)))
-                .collect(Collectors.toList());
+            .filter(node -> !node.isLocal())
+            .map(node -> this.workersPool.submit(() -> proxySingleRequest(node, request)))
+            .collect(Collectors.toList());
     }
 
 
-    int getDefaultReplicasAck() {
-        return nodes.size() / 2 + 1;
+    List<Response> obtainResponses(final List<Future<Response>> futures) {
+        return futures.stream()
+            .map(this::obtainResponse)
+            .filter(Optional::isPresent)
+            .map(Optional::get)
+            .collect(Collectors.toList());
     }
 
-    int getDefaultReplicasFrom() {
+    private Optional<Response> obtainResponse(final Future<Response> responseFuture) {
+        try {
+            return Optional.of(responseFuture.get(TIMEOUT, TimeUnit.MILLISECONDS));
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            return Optional.empty();
+        }
+    }
+
+    int getNodesAmount() {
         return nodes.size();
     }
 
@@ -160,27 +177,29 @@ public final class ClusterNodeRouter {
         return getReplicasForNode(node, replicas);
     }
 
-    private List<ClusterNode> getReplicasForNode(final ClusterNode targetNode, final int replicas) {
+    private List<ClusterNode> getReplicasForNode(final ClusterNode rootNode, final int replicas) {
         if (replicas > nodes.size()) {
             throw new IllegalArgumentException("Too much replicas requested");
         }
         final var result = new ArrayList<ClusterNode>(replicas);
-        int nodeCount = 0;
-        for (final var node : targetNode) {
-            if (nodeCount >= replicas) {
-                break;
-            }
-            nodeCount++;
-            result.add(node);
+        ClusterNode current = rootNode;
+        for (int i = 0; i < replicas; i++) {
+            result.add(current);
+            current = current.next;
         }
         return result;
+    }
+
+    @Override
+    public void close() {
+        MoreExecutors.shutdownAndAwaitTermination(workersPool, TIMEOUT, TimeUnit.MILLISECONDS);
     }
 
     private enum ClusterNodeType {
         LOCAL, REMOTE
     }
 
-    public final static class ClusterNode implements Iterable<ClusterNode> {
+    public final static class ClusterNode {
 
         private final ClusterNodeType type;
         private final StreamHttpClient httpClient;
@@ -195,35 +214,9 @@ public final class ClusterNodeRouter {
             return type == ClusterNodeType.LOCAL;
         }
 
-        @NotNull
-        @Override
-        public Iterator<ClusterNode> iterator() {
-            return new ClusterNodeIterator(this);
-        }
-
         public StreamHttpClient getHttpClient() {
             return httpClient;
         }
 
-        private static final class ClusterNodeIterator implements Iterator<ClusterNode> {
-
-            private ClusterNode node;
-
-            ClusterNodeIterator(final ClusterNode node) {
-                this.node = node;
-            }
-
-            @Override
-            public boolean hasNext() {
-                return node != null;
-            }
-
-            @Override
-            public ClusterNode next() {
-                final var current = node;
-                node = node.next;
-                return current;
-            }
-        }
     }
 }
