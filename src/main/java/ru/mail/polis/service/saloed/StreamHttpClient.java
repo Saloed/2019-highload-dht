@@ -11,7 +11,6 @@ import one.nio.net.ConnectionString;
 import one.nio.net.Socket;
 import one.nio.pool.PoolException;
 import one.nio.util.Utf8;
-import ru.mail.polis.dao.IOExceptionLight;
 
 public class StreamHttpClient extends HttpClient {
 

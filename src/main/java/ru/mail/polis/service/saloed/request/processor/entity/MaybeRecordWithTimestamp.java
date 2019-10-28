@@ -1,7 +1,6 @@
 package ru.mail.polis.service.saloed.request.processor.entity;
 
-import ru.mail.polis.dao.RecordWithTimestamp;
-import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
+import ru.mail.polis.dao.timestamp.RecordWithTimestamp;
 
 public class MaybeRecordWithTimestamp {
 

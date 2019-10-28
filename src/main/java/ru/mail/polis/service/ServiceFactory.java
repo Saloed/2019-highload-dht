@@ -22,7 +22,7 @@ import java.util.Set;
 import org.jetbrains.annotations.NotNull;
 
 import ru.mail.polis.dao.DAO;
-import ru.mail.polis.dao.DAOWithTimestamp;
+import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.service.saloed.ServiceImpl;
 import ru.mail.polis.service.saloed.ClusterNodeRouter;
 

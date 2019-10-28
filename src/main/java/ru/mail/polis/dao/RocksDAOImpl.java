@@ -17,6 +17,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
+import ru.mail.polis.dao.timestamp.RecordWithTimestamp;
+import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
 
 public class RocksDAOImpl implements DAOWithTimestamp {
 

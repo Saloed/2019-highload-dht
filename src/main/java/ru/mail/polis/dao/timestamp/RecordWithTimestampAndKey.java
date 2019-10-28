@@ -1,8 +1,9 @@
-package ru.mail.polis.dao;
+package ru.mail.polis.dao.timestamp;
 
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
+import ru.mail.polis.dao.ByteBufferUtils;
 
 public class RecordWithTimestampAndKey implements Comparable<RecordWithTimestampAndKey> {
     private final RecordWithTimestamp value;

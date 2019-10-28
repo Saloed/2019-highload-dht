@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 
 import org.jetbrains.annotations.NotNull;
+import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 
 /**
  * Custom {@link DAO} factory.

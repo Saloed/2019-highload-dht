@@ -26,7 +26,6 @@ import one.nio.pool.PoolException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jetbrains.annotations.NotNull;
-import ru.mail.polis.dao.IOExceptionLight;
 import ru.mail.polis.service.saloed.topology.ConsistentHashTopology;
 import ru.mail.polis.service.saloed.topology.Topology;
 

@@ -23,7 +23,7 @@ import one.nio.server.AcceptorConfig;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jetbrains.annotations.NotNull;
-import ru.mail.polis.dao.DAOWithTimestamp;
+import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.service.Service;
 import ru.mail.polis.service.saloed.request.RequestUtils;
 import ru.mail.polis.service.saloed.request.processor.EntitiesRequestProcessor;

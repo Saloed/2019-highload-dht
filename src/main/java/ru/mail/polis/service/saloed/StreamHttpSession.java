@@ -6,7 +6,6 @@ import one.nio.http.Response;
 import one.nio.net.Socket;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import ru.mail.polis.dao.IOExceptionLight;
 import ru.mail.polis.service.saloed.payload.Payload;
 
 import java.io.Closeable;

@@ -2,7 +2,7 @@ package ru.mail.polis.service.saloed.request.processor;
 
 import one.nio.http.Request;
 import one.nio.http.Response;
-import ru.mail.polis.dao.DAOWithTimestamp;
+import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.service.saloed.request.processor.entity.*;
 import ru.mail.polis.service.saloed.request.RequestUtils;
 

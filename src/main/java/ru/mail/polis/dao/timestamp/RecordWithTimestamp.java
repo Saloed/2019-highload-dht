@@ -1,4 +1,4 @@
-package ru.mail.polis.dao;
+package ru.mail.polis.dao.timestamp;
 
 import org.jetbrains.annotations.NotNull;
 
