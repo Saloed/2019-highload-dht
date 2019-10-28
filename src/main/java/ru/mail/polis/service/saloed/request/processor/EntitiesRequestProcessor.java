@@ -145,10 +145,9 @@ public final class EntitiesRequestProcessor {
                     break;
                 }
                 final var next = iterator.peek();
-                if (record.sameKeyRecords(next)) {
-                    continue;
+                if (!record.sameKeyRecords(next)) {
+                    break;
                 }
-                break;
             }
             return record;
         }

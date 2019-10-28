@@ -33,6 +33,13 @@ public final class RecordWithTimestampAndKey implements Comparable<RecordWithTim
         return new RecordWithTimestampAndKey(valueRecord, ByteBuffer.wrap(key));
     }
 
+    /**
+     * Creates record with key, from record and key.
+     *
+     * @param key   of record
+     * @param value record with timestamp
+     * @return created record
+     */
     public static RecordWithTimestampAndKey fromKeyValue(final ByteBuffer key,
         final RecordWithTimestamp value) {
         return new RecordWithTimestampAndKey(value, key);
@@ -57,10 +64,21 @@ public final class RecordWithTimestampAndKey implements Comparable<RecordWithTim
         return key;
     }
 
+    /**
+     * Compare two records by key.
+     *
+     * @param other record
+     * @return true if keys are equal
+     */
     public boolean sameKeyRecords(final RecordWithTimestampAndKey other) {
         return key.equals(other.key);
     }
 
+    /**
+     * Serialize record to bytes.
+     *
+     * @return bytes
+     */
     public byte[] toRawBytes() {
         final var valueBytes = value.toRawBytes();
         final var keyBytes = ByteBufferUtils.toArray(key);
