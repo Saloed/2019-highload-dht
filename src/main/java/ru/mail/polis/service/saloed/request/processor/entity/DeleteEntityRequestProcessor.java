@@ -38,14 +38,14 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
     @Override
     public Response makeResponseForUser(List<MaybeRecordWithTimestamp> data, Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
-            return ResponseUtils.NOT_ENOUGH_REPLICAS;
+            return ResponseUtils.notEnoughReplicas();
         }
-        return ResponseUtils.ACCEPTED;
+        return ResponseUtils.accepted();
     }
 
     @Override
     public Response makeResponseForService(MaybeRecordWithTimestamp data, Arguments arguments) {
-        return ResponseUtils.ACCEPTED;
+        return ResponseUtils.accepted();
     }
 
 }

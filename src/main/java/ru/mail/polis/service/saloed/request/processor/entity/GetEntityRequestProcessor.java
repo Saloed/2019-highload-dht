@@ -43,14 +43,14 @@ public class GetEntityRequestProcessor extends
     @Override
     public Response makeResponseForUser(List<MaybeRecordWithTimestamp> data, Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
-            return ResponseUtils.NOT_ENOUGH_REPLICAS;
+            return ResponseUtils.notEnoughReplicas();
         }
         final var notEmptyRecords = data.stream()
                 .map(MaybeRecordWithTimestamp::getRecord)
                 .filter(it -> !it.isEmpty())
                 .collect(Collectors.toList());
         if (notEmptyRecords.isEmpty()) {
-            return ResponseUtils.NOT_FOUND;
+            return ResponseUtils.notFound();
         }
         final var lastRecord = notEmptyRecords.stream()
                 .max(Comparator.comparingLong(RecordWithTimestamp::getTimestamp))
@@ -59,7 +59,7 @@ public class GetEntityRequestProcessor extends
             final var valueArray = ByteBufferUtils.toArray(lastRecord.getValue());
             return new Response(Response.OK, valueArray);
         }
-        return ResponseUtils.NOT_FOUND;
+        return ResponseUtils.notFound();
     }
 
     @Override

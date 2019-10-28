@@ -28,10 +28,14 @@ import one.nio.http.Request;
 import one.nio.http.Response;
 import one.nio.net.ConnectionString;
 import one.nio.pool.PoolException;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.IOExceptionLight;
 
 public final class ClusterNodeRouter implements Closeable {
+
+    private static final Log log = LogFactory.getLog(ClusterNodeRouter.class);
 
     private static final int TIMEOUT = 100;
     private static final int PART_SIZE = 1 << 22;
@@ -144,6 +148,7 @@ public final class ClusterNodeRouter implements Closeable {
         try {
             return Optional.of(responseFuture.get(TIMEOUT, TimeUnit.MILLISECONDS));
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            log.error("Future get error", e);
             return Optional.empty();
         }
     }

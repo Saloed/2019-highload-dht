@@ -44,14 +44,14 @@ public class UpsertEntityRequestProcessor extends
     @Override
     public Response makeResponseForUser(List<MaybeRecordWithTimestamp> data, Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
-            return ResponseUtils.NOT_ENOUGH_REPLICAS;
+            return ResponseUtils.notEnoughReplicas();
         }
-        return ResponseUtils.CREATED;
+        return ResponseUtils.created();
     }
 
     @Override
     public Response makeResponseForService(MaybeRecordWithTimestamp data, Arguments arguments) {
-        return ResponseUtils.CREATED;
+        return ResponseUtils.created();
     }
 
 }

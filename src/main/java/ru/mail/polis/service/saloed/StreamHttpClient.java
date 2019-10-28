@@ -26,7 +26,7 @@ public class StreamHttpClient extends HttpClient {
     /**
      * Perform HTTP request, with expected response transfer encoding as chunked.
      *
-     * @param request HTTP request
+     * @param request        HTTP request
      * @param streamConsumer consume iterator over response body
      * @return response
      * @throws InterruptedException something bad happens
@@ -36,7 +36,8 @@ public class StreamHttpClient extends HttpClient {
      */
     public synchronized Response invokeStream(
         final Request request,
-        final StreamConsumer streamConsumer) throws InterruptedException, PoolException, IOException, HttpException {
+        final StreamConsumer streamConsumer)
+        throws InterruptedException, PoolException, IOException, HttpException {
         final int method = request.getMethod();
         final byte[] rawRequest = request.toBytes();
         StreamReader responseReader;
@@ -70,7 +71,7 @@ public class StreamHttpClient extends HttpClient {
         }
     }
 
-   public interface StreamConsumer {
+    public interface StreamConsumer {
 
         void consume(final StreamReader stream)
             throws IOException, InterruptedException, PoolException, HttpException;
@@ -106,9 +107,11 @@ public class StreamHttpClient extends HttpClient {
             }
 
             response = new Response(responseHeader.substring(9));
-            while (true){
+            while (true) {
                 final String header = readLine();
-                if(header.isEmpty()) break;
+                if (header.isEmpty()) {
+                    break;
+                }
                 response.addHeader(header);
             }
 
@@ -179,7 +182,8 @@ public class StreamHttpClient extends HttpClient {
                     if (currentPos >= currentBuf.length) {
                         throw new HttpException("Line too long");
                     }
-                    length += socket.read(currentBuf, currentPos, currentBuf.length - currentPos, 0);
+                    length += socket
+                        .read(currentBuf, currentPos, currentBuf.length - currentPos, 0);
                 }
             }
             while (currentBuf[currentPos++] != '\n');
