@@ -28,23 +28,42 @@ public final class EntitiesRequestProcessor {
     private final ClusterNodeRouter clusterNodeRouter;
     private final DAOWithTimestamp dao;
 
-    public EntitiesRequestProcessor(final ClusterNodeRouter clusterNodeRouter, final DAOWithTimestamp dao) {
+    public EntitiesRequestProcessor(final ClusterNodeRouter clusterNodeRouter,
+        final DAOWithTimestamp dao) {
         this.clusterNodeRouter = clusterNodeRouter;
         this.dao = dao;
     }
 
+    /**
+     * Retrieve range for service.
+     *
+     * @param start         of range
+     * @param end           of range (optional)
+     * @param streamSession session for response
+     * @throws IOException if network error occurred
+     */
     public void processForService(
-            @NotNull final ByteBuffer start,
-            @Nullable final ByteBuffer end,
-            final StreamHttpSession streamSession) throws IOException {
+        @NotNull final ByteBuffer start,
+        @Nullable final ByteBuffer end,
+        final StreamHttpSession streamSession) throws IOException {
         performSingleNode(start, end, streamSession);
     }
 
+
+    /**
+     * Retrieve range for user. Result range is a merged ranges from all nodes.
+     *
+     * @param start         of range
+     * @param end           of range (optional)
+     * @param request       original HTTP request
+     * @param streamSession session for response
+     * @throws IOException if network error occurred
+     */
     public void processForUser(
-            @NotNull final ByteBuffer start,
-            @Nullable final ByteBuffer end,
-            final Request request,
-            final StreamHttpSession streamSession) throws IOException {
+        @NotNull final ByteBuffer start,
+        @Nullable final ByteBuffer end,
+        final Request request,
+        final StreamHttpSession streamSession) throws IOException {
         final var arguments = new ProcessorArguments(start, end, request, streamSession);
         final var nodes = clusterNodeRouter.allNodes().iterator();
         final var iterators = new ArrayList<Iterator<RecordWithTimestampAndKey>>();
@@ -56,21 +75,23 @@ public final class EntitiesRequestProcessor {
     }
 
     private void performSingleNode(
-            @NotNull final ByteBuffer start,
-            @Nullable final ByteBuffer end,
-            final StreamHttpSession streamSession) throws IOException {
+        @NotNull final ByteBuffer start,
+        @Nullable final ByteBuffer end,
+        final StreamHttpSession streamSession) throws IOException {
         final var iterator = dao.recordRange(start, end);
-        final var payloadIterator = Iterators.transform(iterator, (record) -> (Payload) new RecordWithTimestampAndKeyPayload(record));
+        final var payloadIterator = Iterators.transform(iterator,
+            (record) -> (Payload) new RecordWithTimestampAndKeyPayload(record));
         streamSession.stream(payloadIterator);
     }
 
     private void performNestedProcessing(
-            final ProcessorArguments arguments,
-            final Iterator<ClusterNodeRouter.ClusterNode> nodes,
-            final List<Iterator<RecordWithTimestampAndKey>> iterators)
-            throws IOException, InterruptedException, HttpException, PoolException {
+        final ProcessorArguments arguments,
+        final Iterator<ClusterNodeRouter.ClusterNode> nodes,
+        final List<Iterator<RecordWithTimestampAndKey>> iterators)
+        throws IOException, InterruptedException, HttpException, PoolException {
         if (!nodes.hasNext()) {
-            final var mergedIterators = Iterators.mergeSorted(iterators, RecordWithTimestampAndKey::compareTo);
+            final var mergedIterators = Iterators
+                .mergeSorted(iterators, RecordWithTimestampAndKey::compareTo);
             final var payloadIterator = new ReplicatedRecordsIterator(mergedIterators);
             arguments.streamSession.stream(payloadIterator);
             return;
@@ -86,7 +107,8 @@ public final class EntitiesRequestProcessor {
                 if (iterator.getResponse().getStatus() != 200 || iterator.isNotAvailable()) {
                     throw new IOExceptionLight("Unexpected response from node");
                 }
-                final var recordIterator = Iterators.transform(iterator, RecordWithTimestampAndKey::fromRawBytes);
+                final var recordIterator = Iterators
+                    .transform(iterator, RecordWithTimestampAndKey::fromRawBytes);
                 iterators.add(recordIterator);
                 performNestedProcessing(arguments, nodes, iterators);
             });
@@ -134,7 +156,8 @@ public final class EntitiesRequestProcessor {
         public Payload next() {
             final var recordWithTimestampAndKey = nextRecord;
             advance();
-            final var record = Record.of(recordWithTimestampAndKey.getKey(), recordWithTimestampAndKey.getValue());
+            final var record = Record
+                .of(recordWithTimestampAndKey.getKey(), recordWithTimestampAndKey.getValue());
             return new RecordPayload(record);
         }
     }
@@ -147,10 +170,10 @@ public final class EntitiesRequestProcessor {
         final StreamHttpSession streamSession;
 
         ProcessorArguments(
-                final ByteBuffer start,
-                final ByteBuffer end,
-                final Request request,
-                final StreamHttpSession streamSession) {
+            final ByteBuffer start,
+            final ByteBuffer end,
+            final Request request,
+            final StreamHttpSession streamSession) {
 
             this.start = start;
             this.end = end;

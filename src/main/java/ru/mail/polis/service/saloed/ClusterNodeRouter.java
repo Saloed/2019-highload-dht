@@ -205,10 +205,20 @@ public final class ClusterNodeRouter implements Closeable {
             this.httpClient = httpClient;
         }
 
+        /**
+         * Check whether node is local (current) node.
+         *
+         * @return result of check
+         */
         public boolean isLocal() {
             return type == ClusterNodeType.LOCAL;
         }
 
+        /**
+         * Get http client for node. Returns null for local node.
+         *
+         * @return http client
+         */
         public StreamHttpClient getHttpClient() {
             return httpClient;
         }

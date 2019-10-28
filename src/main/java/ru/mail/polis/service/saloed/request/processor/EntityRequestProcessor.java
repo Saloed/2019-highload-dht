@@ -25,8 +25,8 @@ public abstract class EntityRequestProcessor {
      * @return entity processor
      */
     public static EntityRequestProcessor forHttpMethod(
-            final int method,
-            final DAOWithTimestamp dao) {
+        final int method,
+        final DAOWithTimestamp dao) {
         switch (method) {
             case Request.METHOD_GET:
                 return new GetEntityRequestProcessor(dao);
@@ -36,23 +36,60 @@ public abstract class EntityRequestProcessor {
                 return new DeleteEntityRequestProcessor(dao);
             default:
                 throw new IllegalArgumentException(
-                        "Processor for method is unavailable: " + method);
+                    "Processor for method is unavailable: " + method);
         }
     }
 
+    /**
+     * Make some preprocessing on HTTP request.
+     *
+     * @param request   HTTP request
+     * @param arguments of entity operation
+     * @return modified request
+     */
     public Request preprocessRemote(Request request, Arguments arguments) {
         RequestUtils.setRequestFromService(request);
         RequestUtils.setRequestTimestamp(request, arguments.getTimestamp());
         return request;
     }
 
+    /**
+     * Perform entity operation on a local node.
+     *
+     * @param arguments of entity operation
+     * @return operation result
+     */
     public abstract Optional<MaybeRecordWithTimestamp> processLocal(final Arguments arguments);
 
-    public abstract Optional<MaybeRecordWithTimestamp> obtainRemoteResult(final Response response, final Arguments arguments);
+    /**
+     * Retrieve operation result from remote node response.
+     *
+     * @param response  from remote node
+     * @param arguments of entity operation
+     * @return operation result
+     */
+    public abstract Optional<MaybeRecordWithTimestamp> obtainRemoteResult(final Response response,
+        final Arguments arguments);
 
-    public abstract Response makeResponseForUser(final List<MaybeRecordWithTimestamp> data, final Arguments arguments);
+    /**
+     * Make an HTTP response for user, based on operation results.
+     *
+     * @param data      operation results
+     * @param arguments of entity operation
+     * @return HTTP response
+     */
+    public abstract Response makeResponseForUser(final List<MaybeRecordWithTimestamp> data,
+        final Arguments arguments);
 
-    public abstract Response makeResponseForService(final MaybeRecordWithTimestamp data, final Arguments arguments);
+    /**
+     * Make an HTTP response for service, based on operation result.
+     *
+     * @param data      operation result
+     * @param arguments of entity operation
+     * @return HTTP response
+     */
+    public abstract Response makeResponseForService(final MaybeRecordWithTimestamp data,
+        final Arguments arguments);
 
 
 }
