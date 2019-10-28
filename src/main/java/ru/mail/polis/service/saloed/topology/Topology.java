@@ -11,14 +11,14 @@ public interface Topology<T> {
      *
      * @return all nodes
      */
-    public List<T> allNodes();
+    List<T> allNodes();
 
     /**
      * Retrieve number of all known nodes.
      *
      * @return nodes amount
      */
-    public int nodesAmount();
+    int nodesAmount();
 
     /**
      * Find node to serve request for given key.
@@ -26,6 +26,6 @@ public interface Topology<T> {
      * @param key of request
      * @return nodes
      */
-    public T selectNode(@NotNull final ByteBuffer key);
+    T selectNode(@NotNull final ByteBuffer key);
 
 }

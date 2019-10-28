@@ -33,8 +33,8 @@ public class RocksDAOImpl implements DAOWithTimestamp {
         RocksDB.loadLibrary();
         try {
             final var options = new Options()
-                    .setCreateIfMissing(true)
-                    .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
+                .setCreateIfMissing(true)
+                .setComparator(BuiltinComparator.BYTEWISE_COMPARATOR);
             final var db = RocksDB.open(options, data.getAbsolutePath());
             return new RocksDAOImpl(db);
         } catch (RocksDBException exception) {
@@ -51,7 +51,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @NotNull
     @Override
-    public Iterator<Record> range(@NotNull ByteBuffer from, @Nullable ByteBuffer to) {
+    public Iterator<Record> range(@NotNull final ByteBuffer from, @Nullable final ByteBuffer to) {
         final var iterator = db.newIterator();
         return new RocksRecordIterator(iterator, from, to);
     }
@@ -59,7 +59,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
     @NotNull
     @Override
     public ByteBuffer get(@NotNull final ByteBuffer key)
-            throws IOException, NoSuchElementException {
+        throws IOException, NoSuchElementException {
         final var record = getRecord(key);
         if (!record.isValue()) {
             throw new NoSuchElementExceptionLite("Key is not present: " + key.toString());
@@ -69,7 +69,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @Override
     public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value)
-            throws IOException {
+        throws IOException {
         final var record = RecordWithTimestamp.fromValue(value, System.currentTimeMillis());
         upsertRecord(key, record);
     }
@@ -113,7 +113,7 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     @Override
     public void upsertRecord(@NotNull final ByteBuffer key,
-                             @NotNull final RecordWithTimestamp record) throws IOException {
+        @NotNull final RecordWithTimestamp record) throws IOException {
         final var keyBytes = ByteBufferUtils.toArrayShifted(key);
         final var valueBytes = record.toRawBytes();
         try {
@@ -124,22 +124,35 @@ public class RocksDAOImpl implements DAOWithTimestamp {
     }
 
     @Override
-    public Iterator<RecordWithTimestampAndKey> recordRange(@NotNull ByteBuffer from, @Nullable ByteBuffer to) {
+    public Iterator<RecordWithTimestampAndKey> recordRange(
+        @NotNull final ByteBuffer from,
+        @Nullable final ByteBuffer to) {
         final var iterator = db.newIterator();
         return new RocksRecordWithTimestampIterator(iterator, from, to);
     }
 
-    public static abstract class RocksDAOIterator<T> implements Iterator<T>, Closeable {
+    public abstract static class RocksDAOIterator<T> implements Iterator<T>, Closeable {
+
         private final RocksIterator iterator;
         @Nullable
         private final ByteBuffer upperBound;
 
-        RocksDAOIterator(@NotNull final RocksIterator iterator, @NotNull final ByteBuffer lowerBound, @Nullable final ByteBuffer upperBound) {
+        RocksDAOIterator(
+            @NotNull final RocksIterator iterator,
+            @NotNull final ByteBuffer lowerBound,
+            @Nullable final ByteBuffer upperBound) {
             this.iterator = initIterator(iterator, lowerBound);
-            final var upperBoundShifted = upperBound == null ? null : ByteBufferUtils.toArrayShifted(upperBound);
+            final var upperBoundShifted =
+                upperBound == null ? null : ByteBufferUtils.toArrayShifted(upperBound);
             this.upperBound = upperBound == null ? null : ByteBuffer.wrap(upperBoundShifted);
         }
 
+        private static RocksIterator initIterator(final RocksIterator iterator,
+            final ByteBuffer lowerBound) {
+            final var fromByteArray = ByteBufferUtils.toArrayShifted(lowerBound);
+            iterator.seek(fromByteArray);
+            return iterator;
+        }
 
         public RocksIterator getIterator() {
             return iterator;
@@ -152,8 +165,12 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
         @Override
         public boolean hasNext() {
-            if (!iterator.isValid()) return false;
-            if (upperBound == null) return true;
+            if (!iterator.isValid()) {
+                return false;
+            }
+            if (upperBound == null) {
+                return true;
+            }
             final var key = ByteBuffer.wrap(iterator.key());
             return key.compareTo(upperBound) < 0;
         }
@@ -170,22 +187,20 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
         protected abstract T construct(final byte[] key, final byte[] value);
 
-        private static RocksIterator initIterator(final RocksIterator iterator, final ByteBuffer lowerBound) {
-            final var fromByteArray = ByteBufferUtils.toArrayShifted(lowerBound);
-            iterator.seek(fromByteArray);
-            return iterator;
-        }
-
     }
 
-    private static class RocksRecordWithTimestampIterator extends RocksDAOIterator<RecordWithTimestampAndKey> {
+    private static class RocksRecordWithTimestampIterator extends
+        RocksDAOIterator<RecordWithTimestampAndKey> {
 
-        RocksRecordWithTimestampIterator(@NotNull final RocksIterator iterator, @NotNull final ByteBuffer lowerBound, @Nullable final ByteBuffer upperBound) {
+        RocksRecordWithTimestampIterator(
+            @NotNull final RocksIterator iterator,
+            @NotNull final ByteBuffer lowerBound,
+            @Nullable final ByteBuffer upperBound) {
             super(iterator, lowerBound, upperBound);
         }
 
         @Override
-        protected RecordWithTimestampAndKey construct(byte[] key, byte[] value) {
+        protected RecordWithTimestampAndKey construct(final byte[] key, final byte[] value) {
             final var keyBuffer = ByteBufferUtils.fromArrayShifted(key);
             final var valueRecord = RecordWithTimestamp.fromBytes(value);
             return RecordWithTimestampAndKey.fromKeyValue(keyBuffer, valueRecord);
@@ -194,14 +209,12 @@ public class RocksDAOImpl implements DAOWithTimestamp {
 
     private static class RocksRecordIterator extends RocksDAOIterator<Record> {
 
-        private RocksRecordIterator(@NotNull final RocksIterator iterator, @NotNull final ByteBuffer lowerBound, @Nullable final ByteBuffer upperBound) {
+        private RocksRecordIterator(
+            @NotNull final RocksIterator iterator,
+            @NotNull final ByteBuffer lowerBound,
+            @Nullable final ByteBuffer upperBound) {
             super(iterator, lowerBound, upperBound);
             skipEmptyRecords();
-        }
-
-        @Override
-        public boolean hasNext() {
-            return super.hasNext();
         }
 
         @Override
@@ -212,14 +225,15 @@ public class RocksDAOImpl implements DAOWithTimestamp {
         }
 
         @Override
-        protected Record construct(byte[] key, byte[] value) {
+        protected Record construct(final byte[] key, final byte[] value) {
             final var keyBuffer = ByteBufferUtils.fromArrayShifted(key);
             final var valueBuffer = RecordWithTimestamp.fromBytes(value).getValue();
             return Record.of(keyBuffer, valueBuffer);
         }
 
         void skipEmptyRecords() {
-            while (getIterator().isValid() && RecordWithTimestamp.recordIsEmpty(getIterator().value())) {
+            while (getIterator().isValid() && RecordWithTimestamp
+                .recordIsEmpty(getIterator().value())) {
                 getIterator().next();
             }
         }

@@ -2,8 +2,7 @@ package ru.mail.polis.service.saloed.request;
 
 import one.nio.http.Response;
 
-public class ResponseUtils {
-
+public final class ResponseUtils {
 
     private ResponseUtils() {
     }

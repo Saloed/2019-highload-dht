@@ -2,12 +2,17 @@ package ru.mail.polis.service.saloed.request.processor;
 
 import one.nio.http.Request;
 import one.nio.http.Response;
-import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
-import ru.mail.polis.service.saloed.request.processor.entity.*;
-import ru.mail.polis.service.saloed.request.RequestUtils;
 
 import java.util.List;
 import java.util.Optional;
+
+import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
+import ru.mail.polis.service.saloed.request.RequestUtils;
+import ru.mail.polis.service.saloed.request.processor.entity.Arguments;
+import ru.mail.polis.service.saloed.request.processor.entity.DeleteEntityRequestProcessor;
+import ru.mail.polis.service.saloed.request.processor.entity.GetEntityRequestProcessor;
+import ru.mail.polis.service.saloed.request.processor.entity.MaybeRecordWithTimestamp;
+import ru.mail.polis.service.saloed.request.processor.entity.UpsertEntityRequestProcessor;
 
 public abstract class EntityRequestProcessor {
 
@@ -47,7 +52,7 @@ public abstract class EntityRequestProcessor {
      * @param arguments of entity operation
      * @return modified request
      */
-    public Request preprocessRemote(Request request, Arguments arguments) {
+    public Request preprocessRemote(final Request request, final Arguments arguments) {
         RequestUtils.setRequestFromService(request);
         RequestUtils.setRequestTimestamp(request, arguments.getTimestamp());
         return request;
@@ -90,6 +95,5 @@ public abstract class EntityRequestProcessor {
      */
     public abstract Response makeResponseForService(final MaybeRecordWithTimestamp data,
         final Arguments arguments);
-
 
 }

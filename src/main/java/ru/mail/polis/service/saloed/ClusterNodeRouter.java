@@ -193,7 +193,7 @@ public final class ClusterNodeRouter implements Closeable {
         LOCAL, REMOTE
     }
 
-    public final static class ClusterNode {
+    public static final class ClusterNode {
 
         private final ClusterNodeType type;
         private final StreamHttpClient httpClient;

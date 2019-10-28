@@ -17,7 +17,7 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
     }
 
     @Override
-    public Optional<MaybeRecordWithTimestamp> processLocal(Arguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> processLocal(final Arguments arguments) {
         final var record = RecordWithTimestamp.tombstone(arguments.getTimestamp());
         try {
             dao.upsertRecord(arguments.getKey(), record);
@@ -28,7 +28,8 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
     }
 
     @Override
-    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(Response response, Arguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
+        final Response response, final Arguments arguments) {
         if (response.getStatus() == 202) {
             return Optional.of(MaybeRecordWithTimestamp.EMPTY);
         }
@@ -36,7 +37,8 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
     }
 
     @Override
-    public Response makeResponseForUser(List<MaybeRecordWithTimestamp> data, Arguments arguments) {
+    public Response makeResponseForUser(
+        final List<MaybeRecordWithTimestamp> data, final Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.notEnoughReplicas();
         }
@@ -44,7 +46,8 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
     }
 
     @Override
-    public Response makeResponseForService(MaybeRecordWithTimestamp data, Arguments arguments) {
+    public Response makeResponseForService(
+        final MaybeRecordWithTimestamp data, final Arguments arguments) {
         return ResponseUtils.accepted();
     }
 

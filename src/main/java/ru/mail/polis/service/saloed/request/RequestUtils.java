@@ -2,7 +2,7 @@ package ru.mail.polis.service.saloed.request;
 
 import one.nio.http.Request;
 
-public class RequestUtils {
+public final class RequestUtils {
 
     private static final String TIMESTAMP_HEADER = "X-Service-Timestamp:";
     private static final String SERVICE_REQUEST_HEADER = "X-Service-Request:";

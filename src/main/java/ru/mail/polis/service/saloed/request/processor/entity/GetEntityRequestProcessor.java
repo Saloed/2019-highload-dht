@@ -14,14 +14,15 @@ import ru.mail.polis.service.saloed.request.ResponseUtils;
 import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
 
 public class GetEntityRequestProcessor extends
-        EntityRequestProcessor {
+    EntityRequestProcessor {
 
     public GetEntityRequestProcessor(final DAOWithTimestamp dao) {
         super(dao);
     }
 
     @Override
-    public Optional<MaybeRecordWithTimestamp> processLocal(Arguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> processLocal(
+        final Arguments arguments) {
         try {
             final var record = dao.getRecord(arguments.getKey());
             final var maybe = new MaybeRecordWithTimestamp(record);
@@ -32,7 +33,8 @@ public class GetEntityRequestProcessor extends
     }
 
     @Override
-    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(Response response, Arguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
+        final Response response, final Arguments arguments) {
         if (response.getStatus() != 200) {
             return Optional.empty();
         }
@@ -41,20 +43,21 @@ public class GetEntityRequestProcessor extends
     }
 
     @Override
-    public Response makeResponseForUser(List<MaybeRecordWithTimestamp> data, Arguments arguments) {
+    public Response makeResponseForUser(
+        final List<MaybeRecordWithTimestamp> data, final Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.notEnoughReplicas();
         }
         final var notEmptyRecords = data.stream()
-                .map(MaybeRecordWithTimestamp::getRecord)
-                .filter(it -> !it.isEmpty())
-                .collect(Collectors.toList());
+            .map(MaybeRecordWithTimestamp::getRecord)
+            .filter(it -> !it.isEmpty())
+            .collect(Collectors.toList());
         if (notEmptyRecords.isEmpty()) {
             return ResponseUtils.notFound();
         }
         final var lastRecord = notEmptyRecords.stream()
-                .max(Comparator.comparingLong(RecordWithTimestamp::getTimestamp))
-                .get();
+            .max(Comparator.comparingLong(RecordWithTimestamp::getTimestamp))
+            .get();
         if (lastRecord.isValue()) {
             final var valueArray = ByteBufferUtils.toArray(lastRecord.getValue());
             return new Response(Response.OK, valueArray);
@@ -63,7 +66,8 @@ public class GetEntityRequestProcessor extends
     }
 
     @Override
-    public Response makeResponseForService(MaybeRecordWithTimestamp data, Arguments arguments) {
+    public Response makeResponseForService(
+        final MaybeRecordWithTimestamp data, final Arguments arguments) {
         return new Response(Response.OK, data.getRecord().toRawBytes());
     }
 

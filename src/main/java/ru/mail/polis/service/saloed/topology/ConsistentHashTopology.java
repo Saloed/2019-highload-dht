@@ -17,12 +17,10 @@ public class ConsistentHashTopology<T> implements Topology<T> {
     private final List<T> nodes;
     private final RangeMap<Integer, T> nodesTable;
 
-
     public ConsistentHashTopology(final List<T> nodes) {
         this.nodes = nodes;
         this.nodesTable = initializeTable(nodes);
     }
-
 
     private static <T> RangeMap<Integer, T> initializeTable(final List<T> nodes) {
         final RangeMap<Integer, T> table = TreeRangeMap.create();

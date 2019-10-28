@@ -2,6 +2,9 @@ package ru.mail.polis.service.saloed.request.processor.entity;
 
 import ru.mail.polis.dao.timestamp.RecordWithTimestamp;
 
+/**
+ * Represents a result of entity request. May contains record (i.e. for GET request).
+ */
 public class MaybeRecordWithTimestamp {
 
     public static final MaybeRecordWithTimestamp EMPTY = new MaybeRecordWithTimestamp(null);
@@ -11,6 +14,11 @@ public class MaybeRecordWithTimestamp {
         this.record = record;
     }
 
+    /**
+     * Retrieve containing record if exists.
+     *
+     * @return record
+     */
     public RecordWithTimestamp getRecord() {
         if (record == null) {
             throw new IllegalStateException("Record is not present");

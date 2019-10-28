@@ -138,18 +138,19 @@ public final class EntitiesRequestProcessor {
         }
 
         private RecordWithTimestampAndKey advanceRecord() {
+            RecordWithTimestampAndKey record = null;
             while (iterator.hasNext()) {
-                final var current = iterator.next();
+                record = iterator.next();
                 if (!iterator.hasNext()) {
-                    return current;
+                    break;
                 }
                 final var next = iterator.peek();
-                if (current.sameKeyRecords(next)) {
+                if (record.sameKeyRecords(next)) {
                     continue;
                 }
-                return current;
+                break;
             }
-            return null;
+            return record;
         }
 
         @Override

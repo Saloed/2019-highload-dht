@@ -8,14 +8,23 @@ public class Arguments {
     private final long timestamp;
     private final int replicasAck;
     private final int replicasFrom;
-    private boolean serviceRequest;
+    private final boolean serviceRequest;
 
+    /**
+     * Arguments of entity request.
+     *
+     * @param key            of entity
+     * @param serviceRequest is request from service or not
+     * @param timestamp      of request
+     * @param replicasAck    required replicas acknowledge count
+     * @param replicasFrom   replicas count
+     */
     public Arguments(
-            final ByteBuffer key,
-            final boolean serviceRequest,
-            final long timestamp,
-            final int replicasAck,
-            final int replicasFrom) {
+        final ByteBuffer key,
+        final boolean serviceRequest,
+        final long timestamp,
+        final int replicasAck,
+        final int replicasFrom) {
         this.key = key;
         this.serviceRequest = serviceRequest;
         this.timestamp = timestamp;
