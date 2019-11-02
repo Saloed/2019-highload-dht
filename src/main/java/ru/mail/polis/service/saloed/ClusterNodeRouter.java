@@ -64,23 +64,10 @@ public final class ClusterNodeRouter implements Closeable {
                 return new ClusterNode(type, httpClient);
             })
             .collect(Collectors.toList());
-        chainNodes(nodes);
         final var clusterTopology = new ConsistentHashTopology<>(nodes);
         final var threadFactory = new ThreadFactoryBuilder().setNameFormat("node-router").build();
         final var workersPool = Executors.newFixedThreadPool(nodes.size(), threadFactory);
         return new ClusterNodeRouter(clusterTopology, workersPool);
-    }
-
-    private static void chainNodes(final List<ClusterNode> nodes) {
-        final var nextStream = Streams.concat(
-            nodes.subList(1, nodes.size()).stream(),
-            Stream.of(nodes.get(0)));
-        final var currentStream = nodes.stream();
-        Streams.forEachPair(
-            currentStream,
-            nextStream,
-            (current, next) -> current.next = next
-        );
     }
 
     private static StreamHttpClient createHttpClient(final ClusterNodeType type,
@@ -156,21 +143,7 @@ public final class ClusterNodeRouter implements Closeable {
      * @return nodes
      */
     List<ClusterNode> selectNodes(@NotNull final ByteBuffer key, final int replicas) {
-        final var node = topology.selectNode(key);
-        return getReplicasForNode(node, replicas);
-    }
-
-    private List<ClusterNode> getReplicasForNode(final ClusterNode rootNode, final int replicas) {
-        if (replicas > topology.nodesAmount()) {
-            throw new IllegalArgumentException("Too much replicas requested");
-        }
-        final var result = new ArrayList<ClusterNode>(replicas);
-        ClusterNode current = rootNode;
-        for (int i = 0; i < replicas; i++) {
-            result.add(current);
-            current = current.next;
-        }
-        return result;
+        return topology.selectNode(key, replicas);
     }
 
     private Response proxySingleRequest(
@@ -197,7 +170,6 @@ public final class ClusterNodeRouter implements Closeable {
 
         private final ClusterNodeType type;
         private final StreamHttpClient httpClient;
-        private ClusterNode next;
 
         ClusterNode(final ClusterNodeType type, final StreamHttpClient httpClient) {
             this.type = type;

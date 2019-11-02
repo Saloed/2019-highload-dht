@@ -2,6 +2,7 @@ package ru.mail.polis.service.saloed.topology;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+
 import org.jetbrains.annotations.NotNull;
 
 public interface Topology<T> {
@@ -23,9 +24,10 @@ public interface Topology<T> {
     /**
      * Find node to serve request for given key.
      *
-     * @param key of request
+     * @param key      of request
+     * @param replicas for request
      * @return nodes
      */
-    T selectNode(@NotNull final ByteBuffer key);
+    List<T> selectNode(@NotNull final ByteBuffer key, int replicas);
 
 }

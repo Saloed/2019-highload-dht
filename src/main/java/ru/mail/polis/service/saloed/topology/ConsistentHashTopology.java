@@ -1,13 +1,14 @@
 package ru.mail.polis.service.saloed.topology;
 
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Range;
-import com.google.common.collect.RangeMap;
-import com.google.common.collect.TreeRangeMap;
+import com.google.common.collect.*;
 import com.google.common.hash.Hashing;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import org.jetbrains.annotations.NotNull;
 
 public class ConsistentHashTopology<T> implements Topology<T> {
@@ -15,11 +16,13 @@ public class ConsistentHashTopology<T> implements Topology<T> {
     private static final int PART_SIZE = 1 << 22;
     private static final int PARTS_NUMBER = 1 << (Integer.SIZE - 22);
     private final List<T> nodes;
-    private final RangeMap<Integer, T> nodesTable;
+    private final List<NodeWithNext<T>> nodesWithNext;
+    private final RangeMap<Integer, NodeWithNext<T>> nodesTable;
 
     public ConsistentHashTopology(final List<T> nodes) {
         this.nodes = nodes;
-        this.nodesTable = initializeTable(nodes);
+        this.nodesWithNext = initializeNext(nodes);
+        this.nodesTable = initializeTable(nodesWithNext);
     }
 
     private static <T> RangeMap<Integer, T> initializeTable(final List<T> nodes) {
@@ -35,13 +38,27 @@ public class ConsistentHashTopology<T> implements Topology<T> {
         return table;
     }
 
+    private static <T> List<NodeWithNext<T>> initializeNext(final List<T> nodes) {
+        final var nodesWithNext = nodes.stream().map(NodeWithNext::new).collect(Collectors.toList());
+        final var nextStream = Streams.concat(
+                nodesWithNext.subList(1, nodesWithNext.size()).stream(),
+                Stream.of(nodesWithNext.get(0)));
+        final var currentStream = nodesWithNext.stream();
+        Streams.forEachPair(
+                currentStream,
+                nextStream,
+                (current, next) -> current.next = next
+        );
+        return nodesWithNext;
+    }
+
     private int hash(final ByteBuffer key) {
         final var keyCopy = key.duplicate();
         return Hashing.sha256()
-            .newHasher(keyCopy.remaining())
-            .putBytes(keyCopy)
-            .hash()
-            .asInt();
+                .newHasher(keyCopy.remaining())
+                .putBytes(keyCopy)
+                .hash()
+                .asInt();
     }
 
     @Override
@@ -55,12 +72,36 @@ public class ConsistentHashTopology<T> implements Topology<T> {
     }
 
     @Override
-    public T selectNode(@NotNull final ByteBuffer key) {
+    public List<T> selectNode(@NotNull final ByteBuffer key, int replicas) {
         final var keyHash = hash(key);
         final var node = nodesTable.get(keyHash);
         if (node == null) {
             throw new IllegalStateException("No entry for key in table");
         }
-        return node;
+        return getReplicasForNode(node, replicas);
     }
+
+    private List<T> getReplicasForNode(final NodeWithNext<T> rootNode, final int replicas) {
+        if (replicas > nodesAmount() || replicas < 0) {
+            throw new IllegalArgumentException("Incorrect number of replicas requested");
+        }
+        final var result = new ArrayList<T>(replicas);
+        var current = rootNode;
+        for (int i = 0; i < replicas; i++) {
+            result.add(current.node);
+            current = current.next;
+        }
+        return result;
+    }
+
+    private static final class NodeWithNext<T> {
+        final T node;
+        NodeWithNext<T> next;
+
+        NodeWithNext(final T node) {
+            this.node = node;
+        }
+
+    }
+
 }
