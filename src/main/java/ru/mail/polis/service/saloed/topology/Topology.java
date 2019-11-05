@@ -29,4 +29,12 @@ public interface Topology<T> {
      */
     List<T> selectNode(@NotNull final ByteBuffer key, int replicas);
 
+    /**
+     * Returns new topology, that contains one more node.
+     *
+     * @param node to add
+     * @return topology
+     */
+    Topology<T> addNode(final T node);
+
 }

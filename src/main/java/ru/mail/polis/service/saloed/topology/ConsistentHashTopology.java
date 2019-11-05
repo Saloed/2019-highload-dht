@@ -84,6 +84,27 @@ public class ConsistentHashTopology<T> implements Topology<T> {
         return getReplicasForNode(node, replicas);
     }
 
+    @Override
+    public Topology<T> addNode(T node) {
+        final var newNode = new NodeWithNext<>(node);
+        final var currentNodes = initializeNext(nodes);
+        currentNodes.get(currentNodes.size() - 1).next = newNode;
+        newNode.next = currentNodes.get(0);
+        currentNodes.add(newNode);
+        final RangeMap<Integer, NodeWithNext<T>> table = TreeRangeMap.create();
+        int i = 0;
+        for (final var entry : nodesTable.asMapOfRanges().entrySet()) {
+            if (i % currentNodes.size() != 0) {
+                table.put(entry.getKey(), entry.getValue());
+            } else {
+                table.put(entry.getKey(), newNode);
+            }
+            i++;
+        }
+
+        return null;
+    }
+
     private List<T> getReplicasForNode(final NodeWithNext<T> rootNode, final int replicas) {
         if (replicas > nodesAmount() || replicas < 0) {
             throw new IllegalArgumentException("Incorrect number of replicas requested");
