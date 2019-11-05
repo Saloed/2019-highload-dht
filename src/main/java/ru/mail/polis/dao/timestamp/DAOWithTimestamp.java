@@ -1,11 +1,10 @@
 package ru.mail.polis.dao.timestamp;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import ru.mail.polis.dao.DAO;
 
 public interface DAOWithTimestamp extends DAO {
@@ -28,7 +27,8 @@ public interface DAOWithTimestamp extends DAO {
      * @throws IOException if storage error occurred
      */
     void upsertRecord(@NotNull final ByteBuffer key, @NotNull final RecordWithTimestamp record)
-            throws IOException;
+        throws IOException;
 
-    Iterator<RecordWithTimestampAndKey> recordRange(@NotNull ByteBuffer from, @Nullable ByteBuffer to);
+    Iterator<RecordWithTimestampAndKey> recordRange(@NotNull ByteBuffer from,
+        @Nullable ByteBuffer to);
 }

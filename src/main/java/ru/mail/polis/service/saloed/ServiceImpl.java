@@ -1,6 +1,19 @@
 package ru.mail.polis.service.saloed;
 
 import com.google.common.collect.ImmutableMap;
+import java.io.IOException;
+import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import one.nio.http.HttpServer;
 import one.nio.http.HttpServerConfig;
 import one.nio.http.HttpSession;
@@ -22,20 +35,6 @@ import ru.mail.polis.service.saloed.request.processor.entity.Arguments;
 import ru.mail.polis.service.saloed.request.processor.entity.MaybeRecordWithTimestamp;
 import ru.mail.polis.service.saloed.request.processor.entity.UpsertArguments;
 
-import java.io.IOException;
-import java.net.http.HttpResponse;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 public final class ServiceImpl extends HttpServer implements Service {
 
     private static final Log log = LogFactory.getLog(ServiceImpl.class);
@@ -47,15 +46,15 @@ public final class ServiceImpl extends HttpServer implements Service {
     private final Map<Integer, EntityRequestProcessor> entityRequestProcessor;
 
     private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao,
-                        @NotNull final ClusterNodeRouter clusterNodeRouter)
-            throws IOException {
+        @NotNull final ClusterNodeRouter clusterNodeRouter)
+        throws IOException {
         super(config);
         this.dao = dao;
         this.clusterNodeRouter = clusterNodeRouter;
         this.entityRequestProcessor = ImmutableMap.of(
-                Request.METHOD_GET, EntityRequestProcessor.forHttpMethod(Request.METHOD_GET, dao),
-                Request.METHOD_PUT, EntityRequestProcessor.forHttpMethod(Request.METHOD_PUT, dao),
-                Request.METHOD_DELETE, EntityRequestProcessor.forHttpMethod(Request.METHOD_DELETE, dao)
+            Request.METHOD_GET, EntityRequestProcessor.forHttpMethod(Request.METHOD_GET, dao),
+            Request.METHOD_PUT, EntityRequestProcessor.forHttpMethod(Request.METHOD_PUT, dao),
+            Request.METHOD_DELETE, EntityRequestProcessor.forHttpMethod(Request.METHOD_DELETE, dao)
         );
     }
 
@@ -69,8 +68,8 @@ public final class ServiceImpl extends HttpServer implements Service {
      * @throws IOException if something went wrong during server startup process
      */
     public static Service create(final int port, @NotNull final DAOWithTimestamp dao,
-                                 @NotNull final ClusterNodeRouter clusterNodeRouter)
-            throws IOException {
+        @NotNull final ClusterNodeRouter clusterNodeRouter)
+        throws IOException {
         final var acceptor = new AcceptorConfig();
         final var config = new HttpServerConfig();
         acceptor.port = port;
@@ -103,10 +102,10 @@ public final class ServiceImpl extends HttpServer implements Service {
      */
     @Path(EntityRequestProcessor.REQUEST_PATH)
     public void entity(
-            @Param("id") final String id,
-            @Param("replicas") final String replicas,
-            @NotNull final Request request,
-            @NotNull final HttpSession session) {
+        @Param("id") final String id,
+        @Param("replicas") final String replicas,
+        @NotNull final Request request,
+        @NotNull final HttpSession session) {
         final var processor = entityRequestProcessor.get(request.getMethod());
         if (processor == null) {
             response(session, Response.METHOD_NOT_ALLOWED);
@@ -127,9 +126,9 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     private void processEntityForService(
-            final EntityRequestProcessor processor,
-            final Arguments arguments,
-            final HttpSession session) {
+        final EntityRequestProcessor processor,
+        final Arguments arguments,
+        final HttpSession session) {
         final var result = processor.processLocal(arguments);
         if (result.isEmpty()) {
             log.error("Error while processing request");
@@ -140,7 +139,8 @@ public final class ServiceImpl extends HttpServer implements Service {
         response(session, response);
     }
 
-    private <T> CompletableFuture<List<T>> someOf(final List<CompletableFuture<Optional<T>>> futures, final int amount) {
+    private <T> CompletableFuture<List<T>> someOf(
+        final List<CompletableFuture<Optional<T>>> futures, final int amount) {
         final var result = new CompletableFuture<List<T>>();
         final var resultValue = new CopyOnWriteArrayList<T>();
         final var newFutures = futures.stream().map(future -> future.thenAccept(value -> {
@@ -149,29 +149,31 @@ public final class ServiceImpl extends HttpServer implements Service {
                 result.complete(resultValue);
             }
         })).toArray(CompletableFuture[]::new);
-        CompletableFuture.allOf(newFutures).thenAccept(r -> result.complete(resultValue)).exceptionally(ex -> {
-            log.error("Exception during proxy", ex);
-            return null;
-        });
+        CompletableFuture.allOf(newFutures).thenAccept(r -> result.complete(resultValue))
+            .exceptionally(ex -> {
+                log.error("Exception during proxy", ex);
+                return null;
+            });
         return result;
     }
 
     private void processEntityForUser(
-            final EntityRequestProcessor processor,
-            final Arguments arguments,
-            final HttpSession session) {
+        final EntityRequestProcessor processor,
+        final Arguments arguments,
+        final HttpSession session) {
         final var nodes = clusterNodeRouter
-                .selectNodes(arguments.getKey(), arguments.getReplicasFrom());
+            .selectNodes(arguments.getKey(), arguments.getReplicasFrom());
         final var remoteNodes = nodes.stream().filter(node -> !node.isLocal())
-                .collect(Collectors.toList());
+            .collect(Collectors.toList());
         final var localNode = nodes.stream().filter(node -> node.isLocal()).findAny();
         final var requestParams = ImmutableMap.of("id", arguments.getKeyString());
         final var remoteFutures = remoteNodes.stream()
-                .map(node -> remoteRequest(node, processor, arguments, requestParams));
+            .map(node -> remoteRequest(node, processor, arguments, requestParams));
         final Optional<MaybeRecordWithTimestamp> localResult =
-                localNode.isPresent() ? processor.processLocal(arguments) : Optional.empty();
+            localNode.isPresent() ? processor.processLocal(arguments) : Optional.empty();
         final var localFuture = CompletableFuture.completedFuture(localResult);
-        final var futures = Stream.concat(remoteFutures, Stream.of(localFuture)).collect(Collectors.toList());
+        final var futures = Stream.concat(remoteFutures, Stream.of(localFuture))
+            .collect(Collectors.toList());
         final var results = someOf(futures, arguments.getReplicasAck());
         results.thenAccept(res -> {
             final var response = processor.makeResponseForUser(res, arguments);
@@ -185,23 +187,24 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     @NotNull
     private CompletableFuture<Optional<MaybeRecordWithTimestamp>> remoteRequest(
-            ClusterNodeRouter.ClusterNode node,
-            EntityRequestProcessor processor,
-            Arguments arguments,
-            Map<String, String> requestParams) {
-        final var requestBuilder = node.requestBuilder(EntityRequestProcessor.REQUEST_PATH, requestParams);
+        ClusterNodeRouter.ClusterNode node,
+        EntityRequestProcessor processor,
+        Arguments arguments,
+        Map<String, String> requestParams) {
+        final var requestBuilder = node
+            .requestBuilder(EntityRequestProcessor.REQUEST_PATH, requestParams);
         final var request = processor.preprocessRemote(requestBuilder, arguments).build();
         return node.getHttpClient()
-                .sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
-                .thenApply(response -> processor.obtainRemoteResult(response, arguments))
-                .completeOnTimeout(Optional.empty(), 100, TimeUnit.MILLISECONDS)
-                .exceptionally(ex -> Optional.empty());
+            .sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
+            .thenApply(response -> processor.obtainRemoteResult(response, arguments))
+            .completeOnTimeout(Optional.empty(), 100, TimeUnit.MILLISECONDS)
+            .exceptionally(ex -> Optional.empty());
     }
 
     private Arguments parseEntityArguments(
-            final String id,
-            final String replicas,
-            final Request request) {
+        final String id,
+        final String replicas,
+        final Request request) {
         if (id == null || id.isEmpty()) {
             return null;
         }
@@ -217,7 +220,7 @@ public final class ServiceImpl extends HttpServer implements Service {
             replicasFrom = nodesCount;
         }
         if (replicasFrom > clusterNodeRouter.getNodesAmount() || replicasAck > replicasFrom
-                || replicasAck < 1) {
+            || replicasAck < 1) {
             return null;
         }
         final var timestamp = RequestUtils.getRequestTimestamp(request);
@@ -225,7 +228,8 @@ public final class ServiceImpl extends HttpServer implements Service {
         final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
         if (request.getMethod() == Request.METHOD_PUT) {
             final var body = ByteBuffer.wrap(request.getBody());
-            return new UpsertArguments(key, id, body, isServiceRequest, timestamp, replicasAck, replicasFrom);
+            return new UpsertArguments(key, id, body, isServiceRequest, timestamp, replicasAck,
+                replicasFrom);
         }
         return new Arguments(key, id, isServiceRequest, timestamp, replicasAck, replicasFrom);
     }
@@ -239,12 +243,13 @@ public final class ServiceImpl extends HttpServer implements Service {
      */
     @Path(EntitiesRequestProcessor.REQUEST_PATH)
     public void entities(
-            @Param("start") final String start,
-            @Param("end") final String end,
-            @NotNull final Request request,
-            @NotNull final HttpSession session) {
+        @Param("start") final String start,
+        @Param("end") final String end,
+        @NotNull final Request request,
+        @NotNull final HttpSession session) {
         final var isServiceRequest = RequestUtils.isRequestFromService(request);
-        final var arguments = EntitiesRequestProcessor.Arguments.parse(start, end, isServiceRequest);
+        final var arguments = EntitiesRequestProcessor.Arguments
+            .parse(start, end, isServiceRequest);
         if (arguments == null) {
             response(session, Response.BAD_REQUEST);
             return;

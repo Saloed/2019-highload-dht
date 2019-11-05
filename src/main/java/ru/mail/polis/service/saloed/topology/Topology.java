@@ -2,7 +2,6 @@ package ru.mail.polis.service.saloed.topology;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-
 import org.jetbrains.annotations.NotNull;
 
 public interface Topology<T> {

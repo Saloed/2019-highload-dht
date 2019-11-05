@@ -7,7 +7,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
 import one.nio.http.Response;
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
@@ -36,7 +35,7 @@ public class GetEntityRequestProcessor extends
 
     @Override
     public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
-            final HttpResponse<byte[]> response, final Arguments arguments) {
+        final HttpResponse<byte[]> response, final Arguments arguments) {
         if (response.statusCode() != 200) {
             return Optional.empty();
         }
@@ -68,7 +67,8 @@ public class GetEntityRequestProcessor extends
     }
 
     @Override
-    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request, final Arguments arguments) {
+    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request,
+        final Arguments arguments) {
         return super.preprocessRemote(request, arguments).GET();
     }
 

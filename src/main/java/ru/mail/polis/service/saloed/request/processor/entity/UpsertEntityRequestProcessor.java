@@ -5,8 +5,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Flow;
-
 import one.nio.http.Response;
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
@@ -15,7 +13,7 @@ import ru.mail.polis.service.saloed.request.ResponseUtils;
 import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
 
 public class UpsertEntityRequestProcessor extends
-        EntityRequestProcessor {
+    EntityRequestProcessor {
 
     public UpsertEntityRequestProcessor(final DAOWithTimestamp dao) {
         super(dao);
@@ -23,13 +21,13 @@ public class UpsertEntityRequestProcessor extends
 
     @Override
     public Optional<MaybeRecordWithTimestamp> processLocal(
-            final Arguments arguments) {
+        final Arguments arguments) {
         if (!(arguments instanceof UpsertArguments)) {
             throw new IllegalArgumentException("Upsert arguments expected");
         }
         final var upsertArguments = (UpsertArguments) arguments;
         final var record = RecordWithTimestamp
-                .fromValue(upsertArguments.getValue(), arguments.getTimestamp());
+            .fromValue(upsertArguments.getValue(), arguments.getTimestamp());
         try {
             dao.upsertRecord(arguments.getKey(), record);
         } catch (IOException ex) {
@@ -40,7 +38,7 @@ public class UpsertEntityRequestProcessor extends
 
     @Override
     public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
-            final HttpResponse<byte[]> response, final Arguments arguments) {
+        final HttpResponse<byte[]> response, final Arguments arguments) {
         if (response.statusCode() == 201) {
             return Optional.of(MaybeRecordWithTimestamp.EMPTY);
         }
@@ -49,7 +47,7 @@ public class UpsertEntityRequestProcessor extends
 
     @Override
     public Response makeResponseForUser(
-            final List<MaybeRecordWithTimestamp> data, final Arguments arguments) {
+        final List<MaybeRecordWithTimestamp> data, final Arguments arguments) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.notEnoughReplicas();
         }
@@ -58,12 +56,13 @@ public class UpsertEntityRequestProcessor extends
 
     @Override
     public Response makeResponseForService(
-            final MaybeRecordWithTimestamp data, final Arguments arguments) {
+        final MaybeRecordWithTimestamp data, final Arguments arguments) {
         return ResponseUtils.created();
     }
 
     @Override
-    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request, final Arguments arguments) {
+    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request,
+        final Arguments arguments) {
         if (!(arguments instanceof UpsertArguments)) {
             throw new IllegalArgumentException("Upsert arguments expected");
         }

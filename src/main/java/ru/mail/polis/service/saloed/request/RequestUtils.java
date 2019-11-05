@@ -1,8 +1,7 @@
 package ru.mail.polis.service.saloed.request;
 
-import one.nio.http.Request;
-
 import java.net.http.HttpRequest;
+import one.nio.http.Request;
 
 public final class RequestUtils {
 
@@ -18,7 +17,8 @@ public final class RequestUtils {
      * @param request   HTTP request
      * @param timestamp is a timestamp
      */
-    public static HttpRequest.Builder setRequestTimestamp(final HttpRequest.Builder request, final long timestamp) {
+    public static HttpRequest.Builder setRequestTimestamp(final HttpRequest.Builder request,
+        final long timestamp) {
         return request.header(TIMESTAMP_HEADER, Long.toString(timestamp));
     }
 

@@ -1,5 +1,10 @@
 package ru.mail.polis.service.saloed;
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import one.nio.http.HttpServer;
 import one.nio.http.HttpSession;
 import one.nio.http.Response;
@@ -7,12 +12,6 @@ import one.nio.net.Socket;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import ru.mail.polis.service.saloed.payload.Payload;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.Iterator;
 
 public final class StreamHttpSession extends HttpSession {
 
@@ -57,7 +56,8 @@ public final class StreamHttpSession extends HttpSession {
         final var payload = record.toRawBytes();
         final var payloadLength = payload.length;
         final var payloadLengthHex = Integer.toHexString(payloadLength);
-        final var chunkLength = payloadLengthHex.length() + CRLF.length + payloadLength + CRLF.length;
+        final var chunkLength =
+            payloadLengthHex.length() + CRLF.length + payloadLength + CRLF.length;
 
         final var chunk = new byte[chunkLength];
         final var chunkBuffer = ByteBuffer.wrap(chunk);

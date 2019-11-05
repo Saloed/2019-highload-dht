@@ -22,12 +22,12 @@ public class Arguments {
      * @param replicasFrom   replicas count
      */
     public Arguments(
-            final ByteBuffer key,
-            final String keyString,
-            final boolean serviceRequest,
-            final long timestamp,
-            final int replicasAck,
-            final int replicasFrom) {
+        final ByteBuffer key,
+        final String keyString,
+        final boolean serviceRequest,
+        final long timestamp,
+        final int replicasAck,
+        final int replicasFrom) {
         this.key = key;
         this.keyString = keyString;
         this.serviceRequest = serviceRequest;

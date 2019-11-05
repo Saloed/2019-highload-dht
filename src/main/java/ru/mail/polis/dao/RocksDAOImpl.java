@@ -1,22 +1,19 @@
 package ru.mail.polis.dao;
 
-import org.jetbrains.annotations.NotNull;
-
-import org.jetbrains.annotations.Nullable;
-import org.rocksdb.BuiltinComparator;
-import org.rocksdb.Options;
-import org.rocksdb.RocksDB;
-import org.rocksdb.RocksDBException;
-import org.rocksdb.RocksIterator;
-
-import ru.mail.polis.Record;
-
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.rocksdb.BuiltinComparator;
+import org.rocksdb.Options;
+import org.rocksdb.RocksDB;
+import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
+import ru.mail.polis.Record;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.dao.timestamp.RecordWithTimestamp;
 import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;

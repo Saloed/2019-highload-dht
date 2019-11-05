@@ -1,14 +1,16 @@
 package ru.mail.polis.service.saloed.topology;
 
-import com.google.common.collect.*;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeMap;
+import com.google.common.collect.Streams;
+import com.google.common.collect.TreeRangeMap;
 import com.google.common.hash.Hashing;
-
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.jetbrains.annotations.NotNull;
 
 public class ConsistentHashTopology<T> implements Topology<T> {
@@ -39,15 +41,16 @@ public class ConsistentHashTopology<T> implements Topology<T> {
     }
 
     private static <T> List<NodeWithNext<T>> initializeNext(final List<T> nodes) {
-        final var nodesWithNext = nodes.stream().map(NodeWithNext::new).collect(Collectors.toList());
+        final var nodesWithNext = nodes.stream().map(NodeWithNext::new)
+            .collect(Collectors.toList());
         final var nextStream = Streams.concat(
-                nodesWithNext.subList(1, nodesWithNext.size()).stream(),
-                Stream.of(nodesWithNext.get(0)));
+            nodesWithNext.subList(1, nodesWithNext.size()).stream(),
+            Stream.of(nodesWithNext.get(0)));
         final var currentStream = nodesWithNext.stream();
         Streams.forEachPair(
-                currentStream,
-                nextStream,
-                (current, next) -> current.next = next
+            currentStream,
+            nextStream,
+            (current, next) -> current.next = next
         );
         return nodesWithNext;
     }
@@ -55,10 +58,10 @@ public class ConsistentHashTopology<T> implements Topology<T> {
     private int hash(final ByteBuffer key) {
         final var keyCopy = key.duplicate();
         return Hashing.sha256()
-                .newHasher(keyCopy.remaining())
-                .putBytes(keyCopy)
-                .hash()
-                .asInt();
+            .newHasher(keyCopy.remaining())
+            .putBytes(keyCopy)
+            .hash()
+            .asInt();
     }
 
     @Override
@@ -95,6 +98,7 @@ public class ConsistentHashTopology<T> implements Topology<T> {
     }
 
     private static final class NodeWithNext<T> {
+
         final T node;
         NodeWithNext<T> next;
 

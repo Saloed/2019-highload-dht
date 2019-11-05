@@ -1,8 +1,7 @@
 package ru.mail.polis.dao.timestamp;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.nio.ByteBuffer;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class RecordWithTimestamp {
@@ -101,11 +100,18 @@ public final class RecordWithTimestamp {
         return value;
     }
 
+    @Override
+    public String toString() {
+        return kind.name()
+            + '['
+            + timestamp
+            + ']';
+    }
+
     /**
      * Serialize record to byte array.
-     * Format:
-     * |   timestamp  | mark (VALUE, TOMBSTONE, EMPTY)   |  value        |
-     * | -- 8 bytes --| ------------- 1 byte ------------| 0 - Inf bytes |
+     * Format: |   timestamp  | mark (VALUE, TOMBSTONE, EMPTY)   | value        |
+     *         | -- 8 bytes --| ------------- 1 byte ------------| 0 - Inf bytes |
      *
      * @return serialized record
      */

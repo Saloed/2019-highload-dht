@@ -3,6 +3,7 @@ package ru.mail.polis.service.saloed.payload;
 import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
 
 public class RecordWithTimestampAndKeyPayload implements Payload {
+
     private final RecordWithTimestampAndKey record;
 
     public RecordWithTimestampAndKeyPayload(final RecordWithTimestampAndKey record) {

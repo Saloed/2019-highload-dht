@@ -1,8 +1,8 @@
 package ru.mail.polis.dao.timestamp;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.ByteBufferUtils;
 
 public final class RecordWithTimestampAndKey implements Comparable<RecordWithTimestampAndKey> {
@@ -24,6 +24,16 @@ public final class RecordWithTimestampAndKey implements Comparable<RecordWithTim
     public static RecordWithTimestampAndKey fromRawBytes(final byte[] bytes) {
         final var buffer = ByteBuffer.wrap(bytes);
         return fromRawBytes(buffer);
+    }
+
+    public static boolean mayDeserialize(final ByteBuffer buffer) {
+        if (buffer.remaining() < Integer.BYTES * 2) {
+            return false;
+        }
+        final var copy = buffer.duplicate();
+        final var keyLength = copy.getInt();
+        final var valueLength = copy.getInt();
+        return copy.remaining() >= keyLength + valueLength;
     }
 
     public static RecordWithTimestampAndKey fromRawBytes(final ByteBuffer buffer) {
@@ -95,4 +105,11 @@ public final class RecordWithTimestampAndKey implements Comparable<RecordWithTim
             .array();
     }
 
+    @Override
+    public String toString() {
+        final var keyBytes = ByteBufferUtils.toArray(key.duplicate());
+        return new String(keyBytes, StandardCharsets.UTF_8)
+            + " "
+            + value.toString();
+    }
 }

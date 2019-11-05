@@ -1,44 +1,54 @@
 package ru.mail.polis.service.saloed.request.processor;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.PeekingIterator;
-import one.nio.http.HttpException;
-import one.nio.http.Request;
+import java.io.IOException;
+import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodyHandler;
+import java.net.http.HttpResponse.BodySubscriber;
+import java.net.http.HttpResponse.ResponseInfo;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import one.nio.http.Response;
-import one.nio.pool.PoolException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import ru.mail.polis.Record;
+import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
-import ru.mail.polis.dao.timestamp.RecordWithTimestamp;
-import ru.mail.polis.service.saloed.IOExceptionLight;
 import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
 import ru.mail.polis.service.saloed.ClusterNodeRouter;
+import ru.mail.polis.service.saloed.IOExceptionLight;
 import ru.mail.polis.service.saloed.StreamHttpSession;
 import ru.mail.polis.service.saloed.payload.Payload;
 import ru.mail.polis.service.saloed.payload.RecordPayload;
 import ru.mail.polis.service.saloed.payload.RecordWithTimestampAndKeyPayload;
 import ru.mail.polis.service.saloed.request.RequestUtils;
 
-import java.io.IOException;
-import java.net.http.HttpResponse;
-import java.nio.Buffer;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.*;
-
 public final class EntitiesRequestProcessor {
+
+    public static final String REQUEST_PATH = "/v0/entities";
     private static final Log log = LogFactory.getLog(Stub.class);
     private final ClusterNodeRouter clusterNodeRouter;
     private final DAOWithTimestamp dao;
-    public static final String REQUEST_PATH = "/v0/entities";
 
     public EntitiesRequestProcessor(final ClusterNodeRouter clusterNodeRouter,
-                                    final DAOWithTimestamp dao) {
+        final DAOWithTimestamp dao) {
         this.clusterNodeRouter = clusterNodeRouter;
         this.dao = dao;
     }
@@ -51,8 +61,8 @@ public final class EntitiesRequestProcessor {
      * @throws IOException if network error occurred
      */
     public void processForService(
-            final Arguments arguments,
-            final StreamHttpSession streamSession) throws IOException {
+        final Arguments arguments,
+        final StreamHttpSession streamSession) throws IOException {
         performSingleNode(arguments, streamSession);
     }
 
@@ -64,23 +74,24 @@ public final class EntitiesRequestProcessor {
      * @param streamSession session for response
      */
     public void processForUser(
-            final Arguments arguments, final StreamHttpSession streamSession) {
+        final Arguments arguments, final StreamHttpSession streamSession) {
         performNestedProcessing(arguments, streamSession);
     }
 
     private void performSingleNode(
-            final Arguments arguments,
-            final StreamHttpSession streamSession) throws IOException {
+        final Arguments arguments,
+        final StreamHttpSession streamSession) throws IOException {
         final var iterator = dao.recordRange(arguments.start, arguments.end);
         final var payloadIterator = Iterators.transform(iterator,
-                (record) -> (Payload) new RecordWithTimestampAndKeyPayload(record));
+            (record) -> (Payload) new RecordWithTimestampAndKeyPayload(record));
         streamSession.stream(payloadIterator);
     }
 
-    private void performNestedProcessing(final Arguments arguments, final StreamHttpSession streamSession) {
+    private void performNestedProcessing(final Arguments arguments,
+        final StreamHttpSession streamSession) {
         final var nodes = clusterNodeRouter.allNodes();
         final var iterators = new ArrayList<Iterator<RecordWithTimestampAndKey>>();
-        final var futures = new ArrayList<CompletableFuture<Integer>>();
+        final var futures = new ArrayList<CompletableFuture<Iterator<RecordWithTimestampAndKey>>>();
         for (final var node : nodes) {
             if (node.isLocal()) {
                 final var iterator = dao.recordRange(arguments.start, arguments.end);
@@ -94,92 +105,163 @@ public final class EntitiesRequestProcessor {
             } else {
                 requestParams = Map.of("start", arguments.startStr);
             }
-
             var requestBuilder = node.requestBuilder(REQUEST_PATH, requestParams);
             requestBuilder = RequestUtils.setRequestFromService(requestBuilder);
             final var request = requestBuilder.GET().build();
-            final var subscriber = new Stub();
-            final var future = client.sendAsync(request, HttpResponse.BodyHandlers.fromSubscriber(subscriber))
-                    .thenApply(HttpResponse::statusCode);
-            final var nonNullStub = Iterators.filter(subscriber, Objects::nonNull);
-            final var recordIterator = Iterators
-                    .transform(nonNullStub, RecordWithTimestampAndKey::fromRawBytes);
-            iterators.add(recordIterator);
+            final var future = client
+                .sendAsync(request, new Stub())
+                .orTimeout(100, TimeUnit.MILLISECONDS)
+                .thenApply(HttpResponse::body);
             futures.add(future);
         }
         CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-                .thenApply(__ -> {
-                    if (futures.stream().map(CompletableFuture::join).allMatch(it -> it == 200)) {
-                        final var mergedIterators = Iterators.mergeSorted(iterators, RecordWithTimestampAndKey::compareTo);
-                        final var payloadIterator = new ReplicatedRecordsIterator(mergedIterators);
-                        try {
-                            streamSession.stream(payloadIterator);
-                        } catch (IOException e) {
-                            log.error("Error while streaming response");
-                        }
-                        return null;
-                    }
-                    try {
-                        streamSession.sendError(Response.INTERNAL_ERROR, "");
-                    } catch (IOException e) {
-                        log.error("Error while send response");
-                    }
-                    return null;
-                })
-                .join();
+            .thenApply(__ -> {
+                final var futureResults = futures.stream().map(CompletableFuture::join);
+                final var allIterators = Stream.concat(futureResults, iterators.stream())
+                    .collect(Collectors.toList());
+                final var mergedIterators = Iterators
+                    .mergeSorted(allIterators, RecordWithTimestampAndKey::compareTo);
+                final var payloadIterator = new ReplicatedRecordsIterator(mergedIterators);
+                try {
+                    streamSession.stream(payloadIterator);
+                } catch (IOException e) {
+                    log.error("Error while streaming response");
+                }
+                return null;
+            })
+            .exceptionally(ex -> {
+                log.error("Error in entities", ex);
+                try {
+                    streamSession.sendError(Response.INTERNAL_ERROR, "");
+                } catch (IOException e) {
+                    log.error("Error while send response");
+                }
+                return null;
+            });
     }
 
-    // todo: replace with something normal
-    private static class Stub implements Flow.Subscriber<List<ByteBuffer>>, Iterator<ByteBuffer> {
+    /**
+     * Iterator over response body. todo: replace with something normal.
+     */
+    private static class Stub implements
+        BodyHandler<Iterator<RecordWithTimestampAndKey>>,
+        BodySubscriber<Iterator<RecordWithTimestampAndKey>>,
+        Flow.Subscriber<List<ByteBuffer>>,
+        Iterator<CompletableFuture<Optional<RecordWithTimestampAndKey>>> {
 
+        private static final int FETCH_SIZE = 128;
 
+        private final AtomicBoolean finished = new AtomicBoolean(false);
+        private ResponseInfo responseInfo;
+        private ByteBuffer lastReceived = ByteBuffer.allocate(0);
+        private Queue<RecordWithTimestampAndKey> records = new ConcurrentLinkedDeque<>();
+        private Queue<CompletableFuture<Optional<RecordWithTimestampAndKey>>> nextOffers = new ConcurrentLinkedDeque<>();
         private Flow.Subscription subscription;
-        private boolean finished;
-        private final BlockingQueue<ByteBuffer> queue = new ArrayBlockingQueue<>(1024);
-
 
         @Override
         public void onSubscribe(Flow.Subscription subscription) {
             this.subscription = subscription;
-            this.finished = false;
-            subscription.request(1);
+        }
+
+        private ByteBuffer extend(final ByteBuffer buffer, final ByteBuffer other) {
+            return ByteBuffer.allocate(buffer.remaining() + other.remaining())
+                .put(buffer)
+                .put(other)
+                .rewind();
+        }
+
+        private ByteBuffer truncate(final ByteBuffer buffer) {
+            if (buffer.remaining() == 0) {
+                return ByteBuffer.allocate(0);
+            }
+            final var array = ByteBufferUtils.toArray(buffer);
+            return ByteBuffer.wrap(array);
         }
 
         @Override
         public void onNext(List<ByteBuffer> item) {
-            for (final var element : item) {
-                try {
-                    queue.put(element);
-                } catch (InterruptedException e) {
-                    log.error("Stub put interrupted", e);
+            for (final var buffer : item) {
+                lastReceived = extend(lastReceived, buffer);
+                while (RecordWithTimestampAndKey.mayDeserialize(lastReceived)) {
+                    final var record = RecordWithTimestampAndKey.fromRawBytes(lastReceived);
+                    records.add(record);
                 }
+                lastReceived = truncate(lastReceived);
             }
-            subscription.request(1);
+            if (records.isEmpty()) {
+                subscription.request(FETCH_SIZE);
+                return;
+            }
+            while (!nextOffers.isEmpty() && !records.isEmpty()) {
+                final var nextRecord = nextOffers.poll();
+                final var next = records.poll();
+                nextRecord.complete(Optional.of(next));
+            }
+            if (records.isEmpty()) {
+                subscription.request(FETCH_SIZE);
+            }
         }
 
         @Override
         public void onError(Throwable throwable) {
-            log.error(throwable);
+            nextOffers.iterator().forEachRemaining(it -> it.completeExceptionally(throwable));
+            nextOffers.clear();
+            finished.set(true);
         }
 
         @Override
         public void onComplete() {
-            finished = true;
+            finished.set(true);
+            if (records.isEmpty()) {
+                nextOffers.iterator().forEachRemaining(it -> it.complete(Optional.empty()));
+                nextOffers.clear();
+            }
         }
 
         @Override
         public boolean hasNext() {
-            return !queue.isEmpty() || !finished;
+            return !(finished.get() && records.isEmpty());
         }
 
         @Override
-        public ByteBuffer next() {
-            try {
-                return queue.take();
-            } catch (InterruptedException e) {
-                log.error("Error while retrieving element from Stub", e);
+        public CompletableFuture<Optional<RecordWithTimestampAndKey>> next() {
+            final var next = records.poll();
+            if (next != null) {
+                return CompletableFuture.completedFuture(Optional.of(next));
             }
-            return null;
+            final var nextRecord = new CompletableFuture<Optional<RecordWithTimestampAndKey>>();
+            nextOffers.add(nextRecord);
+            subscription.request(FETCH_SIZE);
+            return nextRecord;
+        }
+
+        @Override
+        public CompletionStage<Iterator<RecordWithTimestampAndKey>> getBody() {
+            if (responseInfo == null || responseInfo.statusCode() != 200) {
+                return CompletableFuture
+                    .failedFuture(new IOExceptionLight("Response status is not OK"));
+            }
+            final Iterator<Optional<RecordWithTimestampAndKey>> awaitIterator = Iterators
+                .transform(this, future -> {
+                    if (future == null) {
+                        return Optional.empty();
+                    }
+                    try {
+                        return future.get(100, TimeUnit.MILLISECONDS);
+                    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                        return Optional.empty();
+                    }
+                });
+            final var nonEmptyIterator = Iterators.filter(awaitIterator, Optional::isPresent);
+            final var recordIterator = Iterators.transform(nonEmptyIterator, Optional::get);
+            return CompletableFuture.completedFuture(recordIterator);
+        }
+
+        @Override
+        public BodySubscriber<Iterator<RecordWithTimestampAndKey>> apply(
+            final ResponseInfo responseInfo) {
+            this.responseInfo = responseInfo;
+            return this;
         }
     }
 
@@ -225,12 +307,13 @@ public final class EntitiesRequestProcessor {
             final var recordWithTimestampAndKey = nextRecord;
             advance();
             final var record = Record
-                    .of(recordWithTimestampAndKey.getKey(), recordWithTimestampAndKey.getValue());
+                .of(recordWithTimestampAndKey.getKey(), recordWithTimestampAndKey.getValue());
             return new RecordPayload(record);
         }
     }
 
     public static class Arguments {
+
         private final String startStr;
         private final String endStr;
         private final ByteBuffer start;
@@ -238,11 +321,11 @@ public final class EntitiesRequestProcessor {
         private final boolean isServiceRequest;
 
         private Arguments(
-                final String startStr,
-                final String endStr,
-                final ByteBuffer start,
-                final ByteBuffer end,
-                final boolean isServiceRequest) {
+            final String startStr,
+            final String endStr,
+            final ByteBuffer start,
+            final ByteBuffer end,
+            final boolean isServiceRequest) {
             this.startStr = startStr;
             this.endStr = endStr;
             this.start = start;
@@ -250,15 +333,8 @@ public final class EntitiesRequestProcessor {
             this.isServiceRequest = isServiceRequest;
         }
 
-        public boolean isServiceRequest() {
-            return isServiceRequest;
-        }
-
-        public boolean hasEnd() {
-            return endStr != null && end != null;
-        }
-
-        public static Arguments parse(final String start, final String end, final boolean isServiceRequest) {
+        public static Arguments parse(final String start, final String end,
+            final boolean isServiceRequest) {
             if (start == null || start.isEmpty()) {
                 return null;
             }
@@ -268,6 +344,14 @@ public final class EntitiesRequestProcessor {
                 endBytes = ByteBuffer.wrap(end.getBytes(StandardCharsets.UTF_8));
             }
             return new Arguments(start, end, startBytes, endBytes, isServiceRequest);
+        }
+
+        public boolean isServiceRequest() {
+            return isServiceRequest;
+        }
+
+        public boolean hasEnd() {
+            return endStr != null && end != null;
         }
     }
 }

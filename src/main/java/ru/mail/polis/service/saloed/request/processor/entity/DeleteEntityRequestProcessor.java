@@ -5,7 +5,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Optional;
-
 import one.nio.http.Response;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.dao.timestamp.RecordWithTimestamp;
@@ -31,7 +30,7 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
 
     @Override
     public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
-            final HttpResponse<byte[]> response, final Arguments arguments) {
+        final HttpResponse<byte[]> response, final Arguments arguments) {
         if (response.statusCode() == 202) {
             return Optional.of(MaybeRecordWithTimestamp.EMPTY);
         }
@@ -54,7 +53,8 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
     }
 
     @Override
-    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request, final Arguments arguments) {
+    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request,
+        final Arguments arguments) {
         return super.preprocessRemote(request, arguments).DELETE();
     }
 }

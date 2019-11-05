@@ -1,13 +1,11 @@
 package ru.mail.polis.service.saloed.request.processor;
 
-import one.nio.http.Request;
-import one.nio.http.Response;
-
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Optional;
-
+import one.nio.http.Request;
+import one.nio.http.Response;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.service.saloed.request.RequestUtils;
 import ru.mail.polis.service.saloed.request.processor.entity.Arguments;
@@ -18,8 +16,8 @@ import ru.mail.polis.service.saloed.request.processor.entity.UpsertEntityRequest
 
 public abstract class EntityRequestProcessor {
 
-    public final DAOWithTimestamp dao;
     public static final String REQUEST_PATH = "/v0/entity";
+    public final DAOWithTimestamp dao;
 
     public EntityRequestProcessor(final DAOWithTimestamp dao) {
         this.dao = dao;
@@ -33,8 +31,8 @@ public abstract class EntityRequestProcessor {
      * @return entity processor
      */
     public static EntityRequestProcessor forHttpMethod(
-            final int method,
-            final DAOWithTimestamp dao) {
+        final int method,
+        final DAOWithTimestamp dao) {
         switch (method) {
             case Request.METHOD_GET:
                 return new GetEntityRequestProcessor(dao);
@@ -44,7 +42,7 @@ public abstract class EntityRequestProcessor {
                 return new DeleteEntityRequestProcessor(dao);
             default:
                 throw new IllegalArgumentException(
-                        "Processor for method is unavailable: " + method);
+                    "Processor for method is unavailable: " + method);
         }
     }
 
@@ -55,7 +53,8 @@ public abstract class EntityRequestProcessor {
      * @param arguments of entity operation
      * @return modified request
      */
-    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request, final Arguments arguments) {
+    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request,
+        final Arguments arguments) {
         final var processed = RequestUtils.setRequestFromService(request);
         return RequestUtils.setRequestTimestamp(processed, arguments.getTimestamp());
     }
@@ -75,8 +74,9 @@ public abstract class EntityRequestProcessor {
      * @param arguments of entity operation
      * @return operation result
      */
-    public abstract Optional<MaybeRecordWithTimestamp> obtainRemoteResult(final HttpResponse<byte[]> response,
-                                                                          final Arguments arguments);
+    public abstract Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
+        final HttpResponse<byte[]> response,
+        final Arguments arguments);
 
     /**
      * Make an HTTP response for user, based on operation results.
@@ -86,7 +86,7 @@ public abstract class EntityRequestProcessor {
      * @return HTTP response
      */
     public abstract Response makeResponseForUser(final List<MaybeRecordWithTimestamp> data,
-                                                 final Arguments arguments);
+        final Arguments arguments);
 
     /**
      * Make an HTTP response for service, based on operation result.
@@ -96,6 +96,6 @@ public abstract class EntityRequestProcessor {
      * @return HTTP response
      */
     public abstract Response makeResponseForService(final MaybeRecordWithTimestamp data,
-                                                    final Arguments arguments);
+        final Arguments arguments);
 
 }
