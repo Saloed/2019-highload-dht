@@ -2,10 +2,12 @@ package ru.mail.polis.service.saloed.request;
 
 import one.nio.http.Request;
 
+import java.net.http.HttpRequest;
+
 public final class RequestUtils {
 
-    private static final String TIMESTAMP_HEADER = "X-Service-Timestamp:";
-    private static final String SERVICE_REQUEST_HEADER = "X-Service-Request:";
+    private static final String TIMESTAMP_HEADER = "X-Service-Timestamp";
+    private static final String SERVICE_REQUEST_HEADER = "X-Service-Request";
 
     private RequestUtils() {
     }
@@ -16,8 +18,8 @@ public final class RequestUtils {
      * @param request   HTTP request
      * @param timestamp is a timestamp
      */
-    public static void setRequestTimestamp(final Request request, final long timestamp) {
-        request.addHeader(TIMESTAMP_HEADER + timestamp);
+    public static HttpRequest.Builder setRequestTimestamp(final HttpRequest.Builder request, final long timestamp) {
+        return request.header(TIMESTAMP_HEADER, Long.toString(timestamp));
     }
 
     /**
@@ -25,8 +27,8 @@ public final class RequestUtils {
      *
      * @param request HTTP request
      */
-    public static void setRequestFromService(final Request request) {
-        request.addHeader(SERVICE_REQUEST_HEADER + "true");
+    public static HttpRequest.Builder setRequestFromService(final HttpRequest.Builder request) {
+        return request.header(SERVICE_REQUEST_HEADER, Boolean.toString(true));
     }
 
 
@@ -37,11 +39,11 @@ public final class RequestUtils {
      * @return result of check
      */
     public static boolean isRequestFromService(final Request request) {
-        final var header = request.getHeader(SERVICE_REQUEST_HEADER);
+        final var header = request.getHeader(SERVICE_REQUEST_HEADER + ": ");
         if (header == null) {
             return false;
         }
-        return Boolean.parseBoolean(header);
+        return Boolean.parseBoolean(header.trim());
     }
 
     /**
@@ -52,11 +54,11 @@ public final class RequestUtils {
      * @return timestamp
      */
     public static long getRequestTimestamp(final Request request) {
-        final var header = request.getHeader(TIMESTAMP_HEADER);
+        final var header = request.getHeader(TIMESTAMP_HEADER + ":");
         if (header == null) {
             return System.currentTimeMillis();
         }
-        return Long.parseLong(header);
+        return Long.parseLong(header.trim());
     }
 
 }

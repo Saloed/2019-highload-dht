@@ -23,6 +23,10 @@ public final class RecordWithTimestampAndKey implements Comparable<RecordWithTim
      */
     public static RecordWithTimestampAndKey fromRawBytes(final byte[] bytes) {
         final var buffer = ByteBuffer.wrap(bytes);
+        return fromRawBytes(buffer);
+    }
+
+    public static RecordWithTimestampAndKey fromRawBytes(final ByteBuffer buffer) {
         final var keyLength = buffer.getInt();
         final var valueLength = buffer.getInt();
         final var key = new byte[keyLength];

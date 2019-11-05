@@ -8,12 +8,13 @@ public class UpsertArguments extends Arguments {
 
     public UpsertArguments(
             final ByteBuffer key,
+            final String keyStr,
             final ByteBuffer value,
             final boolean serviceRequest,
             final long timestamp,
             final int replicasAck,
             final int replicasFrom) {
-        super(key, serviceRequest, timestamp, replicasAck, replicasFrom);
+        super(key, keyStr, serviceRequest, timestamp, replicasAck, replicasFrom);
         this.value = value;
     }
 

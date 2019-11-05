@@ -1,13 +1,18 @@
 package ru.mail.polis.service.saloed;
 
-import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -17,11 +22,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
 import one.nio.http.HttpException;
 import one.nio.http.Request;
 import one.nio.http.Response;
-import one.nio.net.ConnectionString;
 import one.nio.pool.PoolException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -30,15 +34,12 @@ import ru.mail.polis.service.saloed.topology.ConsistentHashTopology;
 import ru.mail.polis.service.saloed.topology.Topology;
 
 public final class ClusterNodeRouter implements Closeable {
-
-    private static final Log log = LogFactory.getLog(ClusterNodeRouter.class);
-
     private static final int TIMEOUT = 100;
     private final ExecutorService workersPool;
     private final Topology<ClusterNode> topology;
 
     private ClusterNodeRouter(final Topology<ClusterNode> topology,
-        final ExecutorService workersPool) {
+                              final ExecutorService workersPool) {
         this.workersPool = workersPool;
         this.topology = topology;
     }
@@ -51,70 +52,32 @@ public final class ClusterNodeRouter implements Closeable {
      * @return topology
      */
     public static ClusterNodeRouter create(
-        @NotNull final Set<String> topology,
-        @NotNull final String me) {
+            @NotNull final Set<String> topology,
+            @NotNull final String me) {
         if (!topology.contains(me)) {
             throw new IllegalArgumentException("Me is not part of topology");
         }
         final var nodes = topology.stream()
-            .sorted()
-            .map(node -> {
-                final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
-                final var httpClient = createHttpClient(type, node);
-                return new ClusterNode(type, httpClient);
-            })
-            .collect(Collectors.toList());
+                .sorted()
+                .map(node -> {
+                    final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
+                    final var httpClient = createHttpClient(type);
+                    return new ClusterNode(type, httpClient, node);
+                })
+                .collect(Collectors.toList());
         final var clusterTopology = new ConsistentHashTopology<>(nodes);
         final var threadFactory = new ThreadFactoryBuilder().setNameFormat("node-router").build();
         final var workersPool = Executors.newFixedThreadPool(nodes.size(), threadFactory);
         return new ClusterNodeRouter(clusterTopology, workersPool);
     }
 
-    private static StreamHttpClient createHttpClient(final ClusterNodeType type,
-        final String node) {
+    private static HttpClient createHttpClient(final ClusterNodeType type) {
         if (type == ClusterNodeType.LOCAL) {
             return null;
         }
-        final var connectionStr = new ConnectionString(node + "?timeout=" + TIMEOUT);
-        return new StreamHttpClient(connectionStr);
-    }
-
-    /**
-     * Send HTTP request to given nodes asynchronously.
-     *
-     * @param nodes   receivers of request
-     * @param request HTTP request
-     * @return futures to responses
-     */
-    public List<Future<Response>> proxyRequest(final List<ClusterNode> nodes,
-        final Request request) {
-        return nodes.stream()
-            .filter(node -> !node.isLocal())
-            .map(node -> this.workersPool.submit(() -> proxySingleRequest(node, request)))
-            .collect(Collectors.toList());
-    }
-
-    /**
-     * Retrieve responses from corresponding futures with timeout.
-     *
-     * @param futures with responses
-     * @return responses
-     */
-    public List<Response> obtainResponses(final List<Future<Response>> futures) {
-        return futures.stream()
-            .map(this::obtainResponse)
-            .filter(Optional::isPresent)
-            .map(Optional::get)
-            .collect(Collectors.toList());
-    }
-
-    private Optional<Response> obtainResponse(final Future<Response> responseFuture) {
-        try {
-            return Optional.of(responseFuture.get(TIMEOUT, TimeUnit.MILLISECONDS));
-        } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            log.error("Future get error", e);
-            return Optional.empty();
-        }
+        return HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(TIMEOUT))
+                .build();
     }
 
     /**
@@ -146,17 +109,6 @@ public final class ClusterNodeRouter implements Closeable {
         return topology.selectNode(key, replicas);
     }
 
-    private Response proxySingleRequest(
-        final ClusterNode node,
-        final Request request
-    ) throws IOException {
-        try {
-            return node.getHttpClient().invoke(request);
-        } catch (InterruptedException | PoolException | HttpException e) {
-            throw new IOExceptionLight("Error in proxy", e);
-        }
-    }
-
     @Override
     public void close() {
         MoreExecutors.shutdownAndAwaitTermination(workersPool, TIMEOUT, TimeUnit.MILLISECONDS);
@@ -169,11 +121,13 @@ public final class ClusterNodeRouter implements Closeable {
     public static final class ClusterNode {
 
         private final ClusterNodeType type;
-        private final StreamHttpClient httpClient;
+        private final HttpClient httpClient;
+        private final String endpoint;
 
-        ClusterNode(final ClusterNodeType type, final StreamHttpClient httpClient) {
+        ClusterNode(final ClusterNodeType type, final HttpClient httpClient, final String endpoint) {
             this.type = type;
             this.httpClient = httpClient;
+            this.endpoint = endpoint;
         }
 
         /**
@@ -190,9 +144,20 @@ public final class ClusterNodeRouter implements Closeable {
          *
          * @return http client
          */
-        public StreamHttpClient getHttpClient() {
+        public HttpClient getHttpClient() {
             return httpClient;
         }
 
+
+        public HttpRequest.Builder requestBuilder(final String path, final Map<String, String> params) {
+            String paramsStr = "";
+            if (!params.isEmpty()) {
+                paramsStr = "?" + params.entrySet().stream()
+                        .map(entry -> entry.getKey() + "=" + entry.getValue())
+                        .collect(Collectors.joining("&"));
+            }
+            final var requestUrl = URI.create(endpoint + path + paramsStr);
+            return HttpRequest.newBuilder(requestUrl).timeout(Duration.ofMillis(TIMEOUT));
+        }
     }
 }

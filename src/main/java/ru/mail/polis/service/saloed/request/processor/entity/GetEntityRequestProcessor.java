@@ -1,6 +1,8 @@
 package ru.mail.polis.service.saloed.request.processor.entity;
 
 import java.io.IOException;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -34,11 +36,11 @@ public class GetEntityRequestProcessor extends
 
     @Override
     public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
-        final Response response, final Arguments arguments) {
-        if (response.getStatus() != 200) {
+            final HttpResponse<byte[]> response, final Arguments arguments) {
+        if (response.statusCode() != 200) {
             return Optional.empty();
         }
-        final var record = RecordWithTimestamp.fromBytes(response.getBody());
+        final var record = RecordWithTimestamp.fromBytes(response.body());
         return Optional.of(new MaybeRecordWithTimestamp(record));
     }
 
@@ -63,6 +65,11 @@ public class GetEntityRequestProcessor extends
             return new Response(Response.OK, valueArray);
         }
         return ResponseUtils.notFound();
+    }
+
+    @Override
+    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request, final Arguments arguments) {
+        return super.preprocessRemote(request, arguments).GET();
     }
 
     @Override

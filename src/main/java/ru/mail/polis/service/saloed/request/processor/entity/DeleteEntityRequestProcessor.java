@@ -1,6 +1,8 @@
 package ru.mail.polis.service.saloed.request.processor.entity;
 
 import java.io.IOException;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,8 +31,8 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
 
     @Override
     public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
-        final Response response, final Arguments arguments) {
-        if (response.getStatus() == 202) {
+            final HttpResponse<byte[]> response, final Arguments arguments) {
+        if (response.statusCode() == 202) {
             return Optional.of(MaybeRecordWithTimestamp.EMPTY);
         }
         return Optional.empty();
@@ -51,4 +53,8 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
         return ResponseUtils.accepted();
     }
 
+    @Override
+    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request, final Arguments arguments) {
+        return super.preprocessRemote(request, arguments).DELETE();
+    }
 }
