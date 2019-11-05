@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import org.jetbrains.annotations.NotNull;
 
-public interface Topology<T> {
+public interface Topology<T extends Comparable<T>> {
 
     /**
      * Retrieve all known nodes.

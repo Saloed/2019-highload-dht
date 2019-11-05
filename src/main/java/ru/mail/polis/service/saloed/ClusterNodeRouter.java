@@ -2,6 +2,7 @@ package ru.mail.polis.service.saloed;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import java.io.Closeable;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -10,11 +11,13 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.service.saloed.topology.ConsistentHashTopology;
 import ru.mail.polis.service.saloed.topology.Topology;
@@ -26,7 +29,7 @@ public final class ClusterNodeRouter implements Closeable {
     private final Topology<ClusterNode> topology;
 
     private ClusterNodeRouter(final Topology<ClusterNode> topology,
-        final ExecutorService workersPool) {
+                              final ExecutorService workersPool) {
         this.workersPool = workersPool;
         this.topology = topology;
     }
@@ -39,19 +42,19 @@ public final class ClusterNodeRouter implements Closeable {
      * @return topology
      */
     public static ClusterNodeRouter create(
-        @NotNull final Set<String> topology,
-        @NotNull final String me) {
+            @NotNull final Set<String> topology,
+            @NotNull final String me) {
         if (!topology.contains(me)) {
             throw new IllegalArgumentException("Me is not part of topology");
         }
         final var nodes = topology.stream()
-            .sorted()
-            .map(node -> {
-                final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
-                final var httpClient = createHttpClient(type);
-                return new ClusterNode(type, httpClient, node);
-            })
-            .collect(Collectors.toList());
+                .sorted()
+                .map(node -> {
+                    final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
+                    final var httpClient = createHttpClient(type);
+                    return new ClusterNode(type, httpClient, node);
+                })
+                .collect(Collectors.toList());
         final var clusterTopology = new ConsistentHashTopology<>(nodes);
         final var threadFactory = new ThreadFactoryBuilder().setNameFormat("node-router").build();
         final var workersPool = Executors.newFixedThreadPool(nodes.size(), threadFactory);
@@ -63,8 +66,8 @@ public final class ClusterNodeRouter implements Closeable {
             return null;
         }
         return HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(TIMEOUT))
-            .build();
+                .connectTimeout(Duration.ofMillis(TIMEOUT))
+                .build();
     }
 
     /**
@@ -105,14 +108,14 @@ public final class ClusterNodeRouter implements Closeable {
         LOCAL, REMOTE
     }
 
-    public static final class ClusterNode {
+    public static final class ClusterNode implements Comparable<ClusterNode> {
 
         private final ClusterNodeType type;
         private final HttpClient httpClient;
         private final String endpoint;
 
         ClusterNode(final ClusterNodeType type, final HttpClient httpClient,
-            final String endpoint) {
+                    final String endpoint) {
             this.type = type;
             this.httpClient = httpClient;
             this.endpoint = endpoint;
@@ -138,15 +141,38 @@ public final class ClusterNodeRouter implements Closeable {
 
 
         public HttpRequest.Builder requestBuilder(final String path,
-            final Map<String, String> params) {
+                                                  final Map<String, String> params) {
             String paramsStr = "";
             if (!params.isEmpty()) {
                 paramsStr = "?" + params.entrySet().stream()
-                    .map(entry -> entry.getKey() + "=" + entry.getValue())
-                    .collect(Collectors.joining("&"));
+                        .map(entry -> entry.getKey() + "=" + entry.getValue())
+                        .collect(Collectors.joining("&"));
             }
             final var requestUrl = URI.create(endpoint + path + paramsStr);
             return HttpRequest.newBuilder(requestUrl).timeout(Duration.ofMillis(TIMEOUT));
+        }
+
+        @Override
+        public String toString() {
+            return "ClusterNode{" + type.name() + " " + endpoint + '}';
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof ClusterNode)) return false;
+            ClusterNode that = (ClusterNode) o;
+            return type == that.type && endpoint.equals(that.endpoint);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, endpoint);
+        }
+
+        @Override
+        public int compareTo(@NotNull ClusterNode o) {
+            return endpoint.compareTo(o.endpoint);
         }
     }
 }

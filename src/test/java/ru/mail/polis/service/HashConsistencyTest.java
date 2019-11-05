@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
 import org.junit.jupiter.api.Test;
 import ru.mail.polis.TestBase;
 import ru.mail.polis.service.saloed.topology.ConsistentHashTopology;
@@ -23,65 +24,85 @@ class HashConsistencyTest extends TestBase {
     @Test
     void testSameNodes() {
         final var topologies = IntStream.rangeClosed(0, 10)
-            .mapToObj(__ -> createTopology(10))
-            .collect(Collectors.toList());
+                .mapToObj(__ -> createTopology(10))
+                .collect(Collectors.toList());
         for (int i = 0; i < 100000; i++) {
             final var key = randomId().getBytes(StandardCharsets.UTF_8);
             final var uniqueNodesCount = topologies.stream()
-                .map(topology -> topology.selectNode(ByteBuffer.wrap(key), 3))
-                .distinct()
-                .count();
+                    .map(topology -> topology.selectNode(ByteBuffer.wrap(key), 3))
+                    .distinct()
+                    .count();
             assertEquals(1, uniqueNodesCount, "All nodes must be equals");
         }
     }
 
     @Test
     void testDistributionUniformness() {
-        final var nodesAmount = 100;
-        final var iterationsCount = 100_000;
-        final var nodesPerSampleCount = 17;
-        final var possibleDeviationPercents = 0.10;
-        final var expectedCount = iterationsCount / nodesAmount * nodesPerSampleCount;
+        final var topology = createTopology(100);
+        testDistributionUniformness(topology, 100_000, 17, 0.1);
+    }
 
-        final var topology = createTopology(nodesAmount);
+    @Test
+    void testDistributionUniformnessAfterNodeAddition() {
+        final var startNodesAmount = 20;
+        final var endNodesAmount = startNodesAmount * 3;
+        var topology = createTopology(startNodesAmount);
+        testDistributionUniformness(topology, 100_000, 3, 0.1);
+        var nodeId = topology.nodesAmount() + 10;
+        while (topology.nodesAmount() < endNodesAmount) {
+            topology = topology.addNode(nodeId++);
+            testDistributionUniformness(topology, 100_000, 3, 0.1);
+        }
+    }
 
+    private void testDistributionUniformness(
+            final Topology<Integer> topology,
+            final int iterationsCount,
+            final int nodesPerSample,
+            final double possibleDeviation
+    ) {
         final var nodesCounters = new HashMap<Integer, Integer>();
         for (int i = 0; i < iterationsCount; i++) {
             final var key = randomId().getBytes(StandardCharsets.UTF_8);
-            topology.selectNode(ByteBuffer.wrap(key), nodesPerSampleCount)
-                .forEach(
-                    node -> nodesCounters
-                        .compute(node, (__, count) -> count == null ? 1 : count + 1)
-                );
+            topology.selectNode(ByteBuffer.wrap(key), nodesPerSample)
+                    .forEach(
+                            node -> nodesCounters.compute(node, (__, count) -> count == null ? 1 : count + 1)
+                    );
         }
 
+        final var expectedCount = iterationsCount / topology.nodesAmount() * nodesPerSample;
         final var results = nodesCounters.values().stream()
-            .map(Integer::doubleValue)
-            .map(count -> count / expectedCount)
-            .map(count -> count > 1 ? count - 1 : 1 - count);
-        assertTrue(results.allMatch(count -> count < possibleDeviationPercents));
+                .map(Integer::doubleValue)
+                .map(count -> count / expectedCount)
+                .map(count -> count > 1 ? count - 1 : 1 - count);
+        assertTrue(results.allMatch(count -> count < possibleDeviation));
     }
-
 
     @Test
     void testDistributionAfterNodeAddition() {
+        testDistributionAfterNodeAddition(1);
+    }
+
+    @Test
+    void testDistributionWithReplicasAfterNodeAddition() {
+        testDistributionAfterNodeAddition(3);
+    }
+
+    void testDistributionAfterNodeAddition(final int nodesPerSample) {
         final var iterationsCount = 100_000;
-        final var nodesPerSampleCount = 1;
-        final var possibleMistakesPercents = 0.10;
+        final var possibleMistakesPercents = 0.02 * nodesPerSample;
 
         final var topology = createTopology(100);
-        final var extendedTopology = createTopology(101);
+        final var extendedTopology = topology.addNode(101);
 
-        int mistakesCount = 0;
+        double mistakesCount = 0;
         for (int i = 0; i < iterationsCount; i++) {
             final var key = randomId().getBytes(StandardCharsets.UTF_8);
-            final var original = topology.selectNode(ByteBuffer.wrap(key), nodesPerSampleCount);
-            final var extended = extendedTopology
-                .selectNode(ByteBuffer.wrap(key), nodesPerSampleCount);
+            final var original = topology.selectNode(ByteBuffer.wrap(key), nodesPerSample);
+            final var extended = extendedTopology.selectNode(ByteBuffer.wrap(key), nodesPerSample);
             mistakesCount += extended.stream().filter(it -> !original.contains(it)).count();
         }
-        System.out.println(mistakesCount);
-
+        assertTrue(mistakesCount / iterationsCount < possibleMistakesPercents);
     }
 
 }
