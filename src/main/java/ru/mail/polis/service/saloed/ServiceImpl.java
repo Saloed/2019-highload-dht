@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -30,6 +29,8 @@ import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.service.Service;
 import ru.mail.polis.service.saloed.request.RequestUtils;
+import ru.mail.polis.service.saloed.request.handler.RejectedRequestHandler;
+import ru.mail.polis.service.saloed.request.handler.RequestHandler;
 import ru.mail.polis.service.saloed.request.processor.EntitiesRequestProcessor;
 import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
 import ru.mail.polis.service.saloed.request.processor.entity.Arguments;
@@ -323,54 +324,6 @@ public final class ServiceImpl extends HttpServer implements Service {
         } catch (IOException exception) {
             metrics.errorResponse();
             log.error("Error during send response", exception);
-        }
-    }
-
-    private static final class RejectedRequestHandler implements RejectedExecutionHandler {
-
-        private final RejectedExecutionHandler defaultHandler;
-
-        RejectedRequestHandler(final RejectedExecutionHandler defaultHandler) {
-            this.defaultHandler = defaultHandler;
-        }
-
-        @Override
-        public void rejectedExecution(final Runnable runnable, final ThreadPoolExecutor executor) {
-            if (!(runnable instanceof RequestHandler)) {
-                defaultHandler.rejectedExecution(runnable, executor);
-                return;
-            }
-            final var handler = (RequestHandler) runnable;
-            handler.handleRejectedRequest();
-        }
-    }
-
-    private static final class RequestHandler implements Runnable {
-
-        private final ServiceMetrics metrics;
-        private final HttpSession session;
-        private final Runnable runnable;
-
-        RequestHandler(final ServiceMetrics metrics,
-            final HttpSession session, final Runnable runnable) {
-            this.metrics = metrics;
-            this.session = session;
-            this.runnable = runnable;
-        }
-
-        @Override
-        public void run() {
-            runnable.run();
-        }
-
-        public void handleRejectedRequest() {
-            log.error("Rejected");
-            metrics.errorResponse();
-            try {
-                session.sendError(Response.SERVICE_UNAVAILABLE, "Rejected");
-            } catch (IOException exception) {
-                log.error("Error during send response", exception);
-            }
         }
     }
 
