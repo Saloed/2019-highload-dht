@@ -196,7 +196,7 @@ public final class ServiceImpl extends HttpServer implements Service {
             resultFutures.add(localFuture);
         }
         final var results = someOf(resultFutures, arguments.getReplicasAck());
-        results.thenAccept(res -> {
+        results.thenAcceptAsync(res -> {
             final var response = processor.makeResponseForUser(res, arguments);
             response(session, response);
             metrics.successUserResponse();
@@ -220,8 +220,8 @@ public final class ServiceImpl extends HttpServer implements Service {
         return node.getHttpClient()
             .sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
             .thenApply(response -> processor.obtainRemoteResult(response, arguments))
-            .completeOnTimeout(Optional.empty(), 100, TimeUnit.MILLISECONDS)
-            .exceptionally(ex -> Optional.empty());
+            .exceptionally(ex -> Optional.empty())
+            .completeOnTimeout(Optional.empty(), 100, TimeUnit.MILLISECONDS);
     }
 
     private Arguments parseEntityArguments(
@@ -296,6 +296,7 @@ public final class ServiceImpl extends HttpServer implements Service {
     @Override
     public synchronized void stop() {
         clusterNodeRouter.close();
+        metrics.close();
         super.stop();
     }
 
@@ -319,6 +320,7 @@ public final class ServiceImpl extends HttpServer implements Service {
     }
 
     private void response(final HttpSession session, final Response response) {
+        metrics.responseWithStatus(response.getStatus());
         try {
             session.sendResponse(response);
         } catch (IOException exception) {

@@ -2,15 +2,16 @@ package ru.mail.polis.service.saloed;
 
 import java.io.Closeable;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import one.nio.http.HttpServer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-public class ServiceMetrics implements Closeable {
+public final class ServiceMetrics implements Closeable {
 
     private static final Log log = LogFactory.getLog(ServiceMetrics.class);
     private static final String FORMAT = "| %-10.10s | %-10.10s | %-10.10s | %-10.10s |\n";
@@ -25,11 +26,12 @@ public class ServiceMetrics implements Closeable {
     private final AtomicInteger errorResponse = new AtomicInteger(0);
     private final AtomicInteger errorUserResponse = new AtomicInteger(0);
     private final AtomicInteger errorServiceResponse = new AtomicInteger(0);
+    private final Map<Integer, AtomicInteger> responseStatuses = new ConcurrentHashMap<>(10);
     private final Timer timer;
     private final ClusterNodeRouter nodeRouter;
-    private final HttpServer server;
+    private final ServiceImpl server;
 
-    ServiceMetrics(final ClusterNodeRouter nodeRouter, final HttpServer server) {
+    ServiceMetrics(final ClusterNodeRouter nodeRouter, final ServiceImpl server) {
         this.nodeRouter = nodeRouter;
         this.server = server;
         timer = new Timer();
@@ -76,6 +78,15 @@ public class ServiceMetrics implements Closeable {
         errorServiceResponse.incrementAndGet();
     }
 
+    void responseWithStatus(final int status) {
+        final var counter = responseStatuses.get(status);
+        if (counter != null) {
+            counter.incrementAndGet();
+            return;
+        }
+        responseStatuses.put(status, new AtomicInteger(1));
+    }
+
     private String makeHeader(final String name) {
         return String.format(FORMAT, name, "total", "user", "service");
     }
@@ -111,6 +122,8 @@ public class ServiceMetrics implements Closeable {
             + makeData(successResponse, successUserResponse, successServiceResponse)
             + makeHeader("Error")
             + makeData(errorResponse, errorUserResponse, errorServiceResponse)
+            + responseStatuses.toString()
+            + '\n'
             + nodeRouterStats()
             + serverStats()
             + '\n';
@@ -126,6 +139,7 @@ public class ServiceMetrics implements Closeable {
         errorResponse.set(0);
         errorUserResponse.set(0);
         errorServiceResponse.set(0);
+        responseStatuses.clear();
     }
 
     private void initializeInfoLoop(final Timer timer) {
