@@ -1,7 +1,6 @@
 package ru.mail.polis.service.saloed;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.Closeable;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -14,7 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
@@ -46,8 +45,11 @@ public final class ClusterNodeRouter implements Closeable {
         if (!topology.contains(me)) {
             throw new IllegalArgumentException("Me is not part of topology");
         }
-        final var threadFactory = new ThreadFactoryBuilder().setNameFormat("node-router").build();
-        final var workersPool = Executors.newFixedThreadPool(topology.size(), threadFactory);
+        final var workersPool = new ForkJoinPool(
+            Runtime.getRuntime().availableProcessors(),
+            ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+            null,
+            true);
         final var nodes = topology.stream()
             .sorted()
             .map(node -> {
@@ -60,7 +62,8 @@ public final class ClusterNodeRouter implements Closeable {
         return new ClusterNodeRouter(clusterTopology, workersPool);
     }
 
-    private static HttpClient createHttpClient(final ClusterNodeType type, final Executor executor) {
+    private static HttpClient createHttpClient(final ClusterNodeType type,
+        final Executor executor) {
         if (type == ClusterNodeType.LOCAL) {
             return null;
         }
