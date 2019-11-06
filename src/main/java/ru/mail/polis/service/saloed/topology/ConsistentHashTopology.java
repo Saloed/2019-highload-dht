@@ -7,7 +7,6 @@ import com.google.common.collect.RangeMap;
 import com.google.common.collect.Streams;
 import com.google.common.collect.TreeRangeMap;
 import com.google.common.hash.Hashing;
-
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -21,7 +20,6 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.jetbrains.annotations.NotNull;
 
 public class ConsistentHashTopology<T extends Comparable<T>> implements Topology<T> {
@@ -39,9 +37,9 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
     }
 
     private ConsistentHashTopology(
-            final List<T> nodes,
-            final List<NodeWithNext<T>> nodesWithNext,
-            final RangeMap<Integer, NodeWithNext<T>> nodesTable) {
+        final List<T> nodes,
+        final List<NodeWithNext<T>> nodesWithNext,
+        final RangeMap<Integer, NodeWithNext<T>> nodesTable) {
         this.nodes = nodes;
         this.nodesWithNext = nodesWithNext;
         this.nodesTable = nodesTable;
@@ -60,17 +58,18 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
         return table;
     }
 
-    private static <T extends Comparable<T>> List<NodeWithNext<T>> initializeNext(final List<T> nodes) {
+    private static <T extends Comparable<T>> List<NodeWithNext<T>> initializeNext(
+        final List<T> nodes) {
         final var nodesWithNext = nodes.stream().map(NodeWithNext::new)
-                .collect(Collectors.toList());
+            .collect(Collectors.toList());
         final var nextStream = Streams.concat(
-                nodesWithNext.subList(1, nodesWithNext.size()).stream(),
-                Stream.of(nodesWithNext.get(0)));
+            nodesWithNext.subList(1, nodesWithNext.size()).stream(),
+            Stream.of(nodesWithNext.get(0)));
         final var currentStream = nodesWithNext.stream();
         Streams.forEachPair(
-                currentStream,
-                nextStream,
-                (current, next) -> current.next = next
+            currentStream,
+            nextStream,
+            (current, next) -> current.next = next
         );
         return nodesWithNext;
     }
@@ -78,10 +77,10 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
     private int hash(final ByteBuffer key) {
         final var keyCopy = key.duplicate();
         return Hashing.sha256()
-                .newHasher(keyCopy.remaining())
-                .putBytes(keyCopy)
-                .hash()
-                .asInt();
+            .newHasher(keyCopy.remaining())
+            .putBytes(keyCopy)
+            .hash()
+            .asInt();
     }
 
     @Override
@@ -111,8 +110,8 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
         newNodes.sort(T::compareTo);
         final var currentNodes = initializeNext(newNodes);
         final var newNodeOptional = currentNodes.stream()
-                .filter(it -> it.node.compareTo(node) == 0)
-                .findFirst();
+            .filter(it -> it.node.compareTo(node) == 0)
+            .findFirst();
         if (newNodeOptional.isEmpty()) {
             throw new IllegalStateException("Something wrong with compareTo");
         }
@@ -122,12 +121,13 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
     }
 
     private RangeMap<Integer, NodeWithNext<T>> rearrangeNodes(
-            final RangeMap<Integer, NodeWithNext<T>> currentTable,
-            final List<NodeWithNext<T>> allNodesWithNew,
-            final NodeWithNext<T> newNode) {
+        final RangeMap<Integer, NodeWithNext<T>> currentTable,
+        final List<NodeWithNext<T>> allNodesWithNew,
+        final NodeWithNext<T> newNode) {
 
         final var newNodeRanges = rearrangeRanges(currentTable, allNodesWithNew, newNode);
-        final var nodesMapping = getNodesMappingForArrange(currentTable.asMapOfRanges().values(), allNodesWithNew, newNode);
+        final var nodesMapping = getNodesMappingForArrange(currentTable.asMapOfRanges().values(),
+            allNodesWithNew, newNode);
         final RangeMap<Integer, NodeWithNext<T>> newTable = TreeRangeMap.create();
         for (final var entry : newNodeRanges) {
             final var node = nodesMapping.get(entry.getValue());
@@ -140,25 +140,26 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
     }
 
     private List<Map.Entry<Range<Integer>, NodeWithNext<T>>> rearrangeRanges(
-            final RangeMap<Integer, NodeWithNext<T>> currentTable,
-            final List<NodeWithNext<T>> allNodesWithNew,
-            final NodeWithNext<T> newNode
+        final RangeMap<Integer, NodeWithNext<T>> currentTable,
+        final List<NodeWithNext<T>> allNodesWithNew,
+        final NodeWithNext<T> newNode
     ) {
         final var nodesRanges = currentTable.asMapOfRanges().entrySet().stream()
-                .collect(Collectors.groupingBy(Map.Entry::getValue))
-                .values()
-                .stream()
-                .map(ArrayDeque::new)
-                .collect(Collectors.toList());
+            .collect(Collectors.groupingBy(Map.Entry::getValue))
+            .values()
+            .stream()
+            .map(ArrayDeque::new)
+            .collect(Collectors.toList());
         final var avgRangesPerNode = nodesRanges.stream()
-                .map(Queue::size)
-                .reduce(Integer::sum)
-                .orElse(0) / allNodesWithNew.size();
+            .map(Queue::size)
+            .reduce(Integer::sum)
+            .orElse(0) / allNodesWithNew.size();
 
         final var newRanges = new ArrayList<Map.Entry<Range<Integer>, NodeWithNext<T>>>();
         int rangesPerNewNode = 0;
         while (rangesPerNewNode <= avgRangesPerNode) {
-            final var nodeRanges = nodesRanges.stream().max(Comparator.comparing(ArrayDeque::size)).get();
+            final var nodeRanges = nodesRanges.stream().max(Comparator.comparing(ArrayDeque::size))
+                .get();
             final var range = nodeRanges.poll();
             if (range == null) {
                 continue;
@@ -166,18 +167,20 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
             newRanges.add(Maps.immutableEntry(range.getKey(), newNode));
             rangesPerNewNode++;
         }
-        final var unchangedOldRanges = nodesRanges.stream().flatMap(Collection::stream).collect(Collectors.toList());
+        final var unchangedOldRanges = nodesRanges.stream().flatMap(Collection::stream)
+            .collect(Collectors.toList());
         newRanges.addAll(unchangedOldRanges);
         return newRanges;
     }
 
     private Map<NodeWithNext<T>, NodeWithNext<T>> getNodesMappingForArrange(
-            final Collection<NodeWithNext<T>> oldNodes,
-            final Collection<NodeWithNext<T>> newNodes,
-            final NodeWithNext<T> additionalNode) {
+        final Collection<NodeWithNext<T>> oldNodes,
+        final Collection<NodeWithNext<T>> newNodes,
+        final NodeWithNext<T> additionalNode) {
         // ensure nodes are unique
         final var oldNodesSet = new HashSet<>(oldNodes);
-        final var newNodesMap = new HashSet<>(newNodes).stream().collect(Collectors.toMap(it -> it.node, it -> it));
+        final var newNodesMap = new HashSet<>(newNodes).stream()
+            .collect(Collectors.toMap(it -> it.node, it -> it));
 
         final var nodesMapping = new HashMap<NodeWithNext<T>, NodeWithNext<T>>();
         for (final var node : oldNodesSet) {
@@ -204,7 +207,8 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
         return result;
     }
 
-    private static final class NodeWithNext<T extends Comparable<T>> implements Comparable<NodeWithNext<T>> {
+    private static final class NodeWithNext<T extends Comparable<T>> implements
+        Comparable<NodeWithNext<T>> {
 
         final T node;
         NodeWithNext<T> next;
@@ -225,8 +229,12 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof NodeWithNext)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof NodeWithNext)) {
+                return false;
+            }
             NodeWithNext<?> that = (NodeWithNext<?>) o;
             return node.equals(that.node);
         }
