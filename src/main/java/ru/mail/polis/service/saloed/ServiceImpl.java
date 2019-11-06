@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import one.nio.http.HttpServer;
@@ -43,6 +45,7 @@ public final class ServiceImpl extends HttpServer implements Service {
     private final DAOWithTimestamp dao;
     private final ClusterNodeRouter clusterNodeRouter;
     private final Map<Integer, EntityRequestProcessor> entityRequestProcessor;
+    private final ServiceMetrics metrics;
 
     private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao,
         @NotNull final ClusterNodeRouter clusterNodeRouter)
@@ -55,6 +58,11 @@ public final class ServiceImpl extends HttpServer implements Service {
             Request.METHOD_PUT, EntityRequestProcessor.forHttpMethod(Request.METHOD_PUT, dao),
             Request.METHOD_DELETE, EntityRequestProcessor.forHttpMethod(Request.METHOD_DELETE, dao)
         );
+        this.metrics = new ServiceMetrics();
+        final var myWorkers = (ThreadPoolExecutor) workers;
+        final var currentHandler = myWorkers.getRejectedExecutionHandler();
+        final var rejectedRequestsHandler = new RejectedRequestHandler(currentHandler);
+        myWorkers.setRejectedExecutionHandler(rejectedRequestsHandler);
     }
 
     /**
@@ -105,37 +113,44 @@ public final class ServiceImpl extends HttpServer implements Service {
         @Param("replicas") final String replicas,
         @NotNull final Request request,
         @NotNull final HttpSession session) {
+        metrics.request();
         final var processor = entityRequestProcessor.get(request.getMethod());
         if (processor == null) {
             response(session, Response.METHOD_NOT_ALLOWED);
+            metrics.successResponse();
             return;
         }
         final var arguments = parseEntityArguments(id, replicas, request);
         if (arguments == null) {
             response(session, Response.BAD_REQUEST);
+            metrics.successResponse();
             return;
         }
-        asyncExecute(() -> {
+        final var handler = new RequestHandler(metrics, session, () -> {
             if (arguments.isServiceRequest()) {
                 processEntityForService(processor, arguments, session);
             } else {
                 processEntityForUser(processor, arguments, session);
             }
         });
+        asyncExecute(handler);
     }
 
     private void processEntityForService(
         final EntityRequestProcessor processor,
         final Arguments arguments,
         final HttpSession session) {
+        metrics.serviceRequest();
         final var result = processor.processLocal(arguments);
         if (result.isEmpty()) {
             log.error("Error while processing request");
             response(session, Response.INTERNAL_ERROR);
+            metrics.errorServiceResponse();
             return;
         }
         final var response = processor.makeResponseForService(result.get(), arguments);
         response(session, response);
+        metrics.successServiceResponse();
     }
 
     private <T> CompletableFuture<List<T>> someOf(
@@ -160,6 +175,7 @@ public final class ServiceImpl extends HttpServer implements Service {
         final EntityRequestProcessor processor,
         final Arguments arguments,
         final HttpSession session) {
+        metrics.userRequest();
         final var nodes = clusterNodeRouter
             .selectNodes(arguments.getKey(), arguments.getReplicasFrom());
         final var requestParams = ImmutableMap.of("id", arguments.getKeyString());
@@ -182,9 +198,11 @@ public final class ServiceImpl extends HttpServer implements Service {
         results.thenAccept(res -> {
             final var response = processor.makeResponseForUser(res, arguments);
             response(session, response);
+            metrics.successUserResponse();
         }).exceptionally(ex -> {
             log.error("Error while processing request", ex);
             response(session, Response.INTERNAL_ERROR);
+            metrics.errorUserResponse();
             return null;
         });
     }
@@ -259,7 +277,7 @@ public final class ServiceImpl extends HttpServer implements Service {
             return;
         }
         final var streamSession = (StreamHttpSession) session;
-        asyncExecute(() -> {
+        final var handler = new RequestHandler(metrics, session, () -> {
             final var processor = new EntitiesRequestProcessor(clusterNodeRouter, dao);
             try {
                 if (arguments.isServiceRequest()) {
@@ -271,6 +289,7 @@ public final class ServiceImpl extends HttpServer implements Service {
                 response(session, Response.INTERNAL_ERROR);
             }
         });
+        asyncExecute(handler);
     }
 
     @Override
@@ -302,7 +321,56 @@ public final class ServiceImpl extends HttpServer implements Service {
         try {
             session.sendResponse(response);
         } catch (IOException exception) {
+            metrics.errorResponse();
             log.error("Error during send response", exception);
+        }
+    }
+
+    private static final class RejectedRequestHandler implements RejectedExecutionHandler {
+
+        private final RejectedExecutionHandler defaultHandler;
+
+        RejectedRequestHandler(final RejectedExecutionHandler defaultHandler) {
+            this.defaultHandler = defaultHandler;
+        }
+
+        @Override
+        public void rejectedExecution(final Runnable runnable, final ThreadPoolExecutor executor) {
+            if (!(runnable instanceof RequestHandler)) {
+                defaultHandler.rejectedExecution(runnable, executor);
+                return;
+            }
+            final var handler = (RequestHandler) runnable;
+            handler.handleRejectedRequest();
+        }
+    }
+
+    private static final class RequestHandler implements Runnable {
+
+        private final ServiceMetrics metrics;
+        private final HttpSession session;
+        private final Runnable runnable;
+
+        RequestHandler(final ServiceMetrics metrics,
+            final HttpSession session, final Runnable runnable) {
+            this.metrics = metrics;
+            this.session = session;
+            this.runnable = runnable;
+        }
+
+        @Override
+        public void run() {
+            runnable.run();
+        }
+
+        public void handleRejectedRequest() {
+            log.error("Rejected");
+            metrics.errorResponse();
+            try {
+                session.sendError(Response.SERVICE_UNAVAILABLE, "Rejected");
+            } catch (IOException exception) {
+                log.error("Error during send response", exception);
+            }
         }
     }
 

@@ -47,7 +47,7 @@ public final class ClusterNodeRouter implements Closeable {
             throw new IllegalArgumentException("Me is not part of topology");
         }
         final var threadFactory = new ThreadFactoryBuilder().setNameFormat("node-router").build();
-        final var workersPool = Executors.newFixedThreadPool(topology.size() * 2, threadFactory);
+        final var workersPool = Executors.newFixedThreadPool(topology.size(), threadFactory);
         final var nodes = topology.stream()
             .sorted()
             .map(node -> {
