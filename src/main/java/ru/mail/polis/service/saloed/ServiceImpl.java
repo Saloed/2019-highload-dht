@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,8 +13,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import one.nio.http.HttpServer;
 import one.nio.http.HttpServerConfig;
 import one.nio.http.HttpSession;
@@ -163,18 +162,23 @@ public final class ServiceImpl extends HttpServer implements Service {
         final HttpSession session) {
         final var nodes = clusterNodeRouter
             .selectNodes(arguments.getKey(), arguments.getReplicasFrom());
-        final var remoteNodes = nodes.stream().filter(node -> !node.isLocal())
-            .collect(Collectors.toList());
-        final var localNode = nodes.stream().filter(node -> node.isLocal()).findAny();
         final var requestParams = ImmutableMap.of("id", arguments.getKeyString());
-        final var remoteFutures = remoteNodes.stream()
-            .map(node -> remoteRequest(node, processor, arguments, requestParams));
-        final Optional<MaybeRecordWithTimestamp> localResult =
-            localNode.isPresent() ? processor.processLocal(arguments) : Optional.empty();
-        final var localFuture = CompletableFuture.completedFuture(localResult);
-        final var futures = Stream.concat(remoteFutures, Stream.of(localFuture))
-            .collect(Collectors.toList());
-        final var results = someOf(futures, arguments.getReplicasAck());
+        final var resultFutures = new ArrayList<CompletableFuture<Optional<MaybeRecordWithTimestamp>>>();
+        boolean needProcessLocally = false;
+        for (final var node : nodes) {
+            if (node.isLocal()) {
+                needProcessLocally = true;
+                continue;
+            }
+            final var request = remoteRequest(node, processor, arguments, requestParams);
+            resultFutures.add(request);
+        }
+        if (needProcessLocally) {
+            final var localResult = processor.processLocal(arguments);
+            final var localFuture = CompletableFuture.completedFuture(localResult);
+            resultFutures.add(localFuture);
+        }
+        final var results = someOf(resultFutures, arguments.getReplicasAck());
         results.thenAccept(res -> {
             final var response = processor.makeResponseForUser(res, arguments);
             response(session, response);
