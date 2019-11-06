@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -45,26 +46,27 @@ public final class ClusterNodeRouter implements Closeable {
         if (!topology.contains(me)) {
             throw new IllegalArgumentException("Me is not part of topology");
         }
+        final var threadFactory = new ThreadFactoryBuilder().setNameFormat("node-router").build();
+        final var workersPool = Executors.newFixedThreadPool(topology.size() * 2, threadFactory);
         final var nodes = topology.stream()
             .sorted()
             .map(node -> {
                 final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
-                final var httpClient = createHttpClient(type);
+                final var httpClient = createHttpClient(type, workersPool);
                 return new ClusterNode(type, httpClient, node);
             })
             .collect(Collectors.toList());
         final var clusterTopology = new ConsistentHashTopology<>(nodes);
-        final var threadFactory = new ThreadFactoryBuilder().setNameFormat("node-router").build();
-        final var workersPool = Executors.newFixedThreadPool(nodes.size(), threadFactory);
         return new ClusterNodeRouter(clusterTopology, workersPool);
     }
 
-    private static HttpClient createHttpClient(final ClusterNodeType type) {
+    private static HttpClient createHttpClient(final ClusterNodeType type, final Executor executor) {
         if (type == ClusterNodeType.LOCAL) {
             return null;
         }
         return HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(TIMEOUT))
+            .executor(executor)
             .build();
     }
 
