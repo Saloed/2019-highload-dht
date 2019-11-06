@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -23,11 +22,11 @@ import ru.mail.polis.service.saloed.topology.Topology;
 public final class ClusterNodeRouter implements Closeable {
 
     private static final int TIMEOUT = 100;
-    private final ExecutorService workersPool;
+    private final ForkJoinPool workersPool;
     private final Topology<ClusterNode> topology;
 
     private ClusterNodeRouter(final Topology<ClusterNode> topology,
-        final ExecutorService workersPool) {
+        final ForkJoinPool workersPool) {
         this.workersPool = workersPool;
         this.topology = topology;
     }
@@ -71,6 +70,10 @@ public final class ClusterNodeRouter implements Closeable {
             .connectTimeout(Duration.ofMillis(TIMEOUT))
             .executor(executor)
             .build();
+    }
+
+    ForkJoinPool getWorkers() {
+        return workersPool;
     }
 
     /**

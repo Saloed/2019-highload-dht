@@ -28,7 +28,6 @@ public final class RequestHandler implements Runnable {
     }
 
     void handleRejectedRequest() {
-        log.error("Rejected");
         metrics.errorResponse();
         try {
             session.sendError(Response.SERVICE_UNAVAILABLE, "Rejected");

@@ -59,7 +59,7 @@ public final class ServiceImpl extends HttpServer implements Service {
             Request.METHOD_PUT, EntityRequestProcessor.forHttpMethod(Request.METHOD_PUT, dao),
             Request.METHOD_DELETE, EntityRequestProcessor.forHttpMethod(Request.METHOD_DELETE, dao)
         );
-        this.metrics = new ServiceMetrics();
+        this.metrics = new ServiceMetrics(clusterNodeRouter, this);
         final var myWorkers = (ThreadPoolExecutor) workers;
         final var currentHandler = myWorkers.getRejectedExecutionHandler();
         final var rejectedRequestsHandler = new RejectedRequestHandler(currentHandler);

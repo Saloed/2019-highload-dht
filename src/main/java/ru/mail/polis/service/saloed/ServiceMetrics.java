@@ -6,13 +6,14 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import one.nio.http.HttpServer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 public class ServiceMetrics implements Closeable {
 
     private static final Log log = LogFactory.getLog(ServiceMetrics.class);
-    private static final String FORMAT = "\n| %-10.10s | %-10.10s | %-10.10s | %-10.10s |";
+    private static final String FORMAT = "| %-10.10s | %-10.10s | %-10.10s | %-10.10s |\n";
     private static final Duration PERIOD = Duration.ofSeconds(10);
 
     private final AtomicInteger request = new AtomicInteger(0);
@@ -25,8 +26,12 @@ public class ServiceMetrics implements Closeable {
     private final AtomicInteger errorUserResponse = new AtomicInteger(0);
     private final AtomicInteger errorServiceResponse = new AtomicInteger(0);
     private final Timer timer;
+    private final ClusterNodeRouter nodeRouter;
+    private final HttpServer server;
 
-    ServiceMetrics() {
+    ServiceMetrics(final ClusterNodeRouter nodeRouter, final HttpServer server) {
+        this.nodeRouter = nodeRouter;
+        this.server = server;
         timer = new Timer();
         initializeInfoLoop(timer);
     }
@@ -80,13 +85,34 @@ public class ServiceMetrics implements Closeable {
         return String.format(FORMAT, "", total.get(), user.get(), service.get());
     }
 
+    private String nodeRouterStats() {
+        final var workers = nodeRouter.getWorkers();
+        return "Node router workers: "
+            + workers.toString()
+            + '\n';
+    }
+
+    private String serverStats() {
+        return "Server: "
+            + "Processed "
+            + server.getRequestsProcessed()
+            + " Rejected "
+            + server.getRequestsRejected()
+            + " Avg queue "
+            + server.getQueueAvgLength()
+            + "\n";
+    }
+
     private String getInfoString() {
-        return makeHeader("Requests")
+        return "\n"
+            + makeHeader("Requests")
             + makeData(request, userRequest, serviceRequest)
             + makeHeader("Success")
             + makeData(successResponse, successUserResponse, successServiceResponse)
             + makeHeader("Error")
             + makeData(errorResponse, errorUserResponse, errorServiceResponse)
+            + nodeRouterStats()
+            + serverStats()
             + '\n';
     }
 
