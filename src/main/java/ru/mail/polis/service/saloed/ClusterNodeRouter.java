@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -22,7 +22,7 @@ import ru.mail.polis.service.saloed.topology.Topology;
 public final class ClusterNodeRouter implements Closeable {
 
     private static final int TIMEOUT = 100;
-    private final ForkJoinPool workersPool;
+    private final ExecutorService workersPool;
     private final Topology<ClusterNode> topology;
 
     private ClusterNodeRouter(final Topology<ClusterNode> topology,
@@ -45,34 +45,26 @@ public final class ClusterNodeRouter implements Closeable {
             throw new IllegalArgumentException("Me is not part of topology");
         }
         final var workersPool = new ForkJoinPool(
-            Runtime.getRuntime().availableProcessors(),
+            topology.size(),
             ForkJoinPool.defaultForkJoinWorkerThreadFactory,
             null,
             true);
+        final var client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofMillis(TIMEOUT))
+            .executor(workersPool)
+            .build();
         final var nodes = topology.stream()
             .sorted()
             .map(node -> {
                 final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
-                final var httpClient = createHttpClient(type, workersPool);
-                return new ClusterNode(type, httpClient, node);
+                return new ClusterNode(type, client, node);
             })
             .collect(Collectors.toList());
         final var clusterTopology = new ConsistentHashTopology<>(nodes);
         return new ClusterNodeRouter(clusterTopology, workersPool);
     }
 
-    private static HttpClient createHttpClient(final ClusterNodeType type,
-        final Executor executor) {
-        if (type == ClusterNodeType.LOCAL) {
-            return null;
-        }
-        return HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(TIMEOUT))
-            .executor(executor)
-            .build();
-    }
-
-    ForkJoinPool getWorkers() {
+    ExecutorService getWorkers() {
         return workersPool;
     }
 

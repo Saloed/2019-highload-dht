@@ -3,7 +3,9 @@ package ru.mail.polis.service.saloed.request.processor.entity;
 import java.io.IOException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.List;
+import java.net.http.HttpResponse.BodySubscriber;
+import java.net.http.HttpResponse.ResponseInfo;
+import java.util.Collection;
 import java.util.Optional;
 import one.nio.http.Response;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
@@ -13,12 +15,12 @@ import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
 
 public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
 
-    public DeleteEntityRequestProcessor(final DAOWithTimestamp dao) {
-        super(dao);
+    public DeleteEntityRequestProcessor(final DAOWithTimestamp dao, final Arguments arguments) {
+        super(dao, arguments);
     }
 
     @Override
-    public Optional<MaybeRecordWithTimestamp> processLocal(final Arguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> processLocal() {
         final var record = RecordWithTimestamp.tombstone(arguments.getTimestamp());
         try {
             dao.upsertRecord(arguments.getKey(), record);
@@ -29,17 +31,17 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
     }
 
     @Override
-    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
-        final HttpResponse<byte[]> response, final Arguments arguments) {
-        if (response.statusCode() == 202) {
-            return Optional.of(MaybeRecordWithTimestamp.EMPTY);
-        }
-        return Optional.empty();
+    public BodySubscriber<Optional<MaybeRecordWithTimestamp>> obtainRemoteResult(
+        final ResponseInfo response) {
+        return HttpResponse.BodySubscribers.replacing(
+            response.statusCode() == 202
+                ? Optional.of(MaybeRecordWithTimestamp.EMPTY)
+                : Optional.empty());
     }
 
     @Override
     public Response makeResponseForUser(
-        final List<MaybeRecordWithTimestamp> data, final Arguments arguments) {
+        final Collection<MaybeRecordWithTimestamp> data) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.notEnoughReplicas();
         }
@@ -48,13 +50,12 @@ public class DeleteEntityRequestProcessor extends EntityRequestProcessor {
 
     @Override
     public Response makeResponseForService(
-        final MaybeRecordWithTimestamp data, final Arguments arguments) {
+        final MaybeRecordWithTimestamp data) {
         return ResponseUtils.accepted();
     }
 
     @Override
-    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request,
-        final Arguments arguments) {
-        return super.preprocessRemote(request, arguments).DELETE();
+    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request) {
+        return super.preprocessRemote(request).DELETE();
     }
 }

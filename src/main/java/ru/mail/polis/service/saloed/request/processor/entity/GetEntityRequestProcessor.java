@@ -3,8 +3,10 @@ package ru.mail.polis.service.saloed.request.processor.entity;
 import java.io.IOException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodySubscriber;
+import java.net.http.HttpResponse.ResponseInfo;
+import java.util.Collection;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import one.nio.http.Response;
@@ -17,13 +19,12 @@ import ru.mail.polis.service.saloed.request.processor.EntityRequestProcessor;
 public class GetEntityRequestProcessor extends
     EntityRequestProcessor {
 
-    public GetEntityRequestProcessor(final DAOWithTimestamp dao) {
-        super(dao);
+    public GetEntityRequestProcessor(final DAOWithTimestamp dao, final Arguments arguments) {
+        super(dao, arguments);
     }
 
     @Override
-    public Optional<MaybeRecordWithTimestamp> processLocal(
-        final Arguments arguments) {
+    public Optional<MaybeRecordWithTimestamp> processLocal() {
         try {
             final var record = dao.getRecord(arguments.getKey());
             final var maybe = new MaybeRecordWithTimestamp(record);
@@ -34,18 +35,21 @@ public class GetEntityRequestProcessor extends
     }
 
     @Override
-    public Optional<MaybeRecordWithTimestamp> obtainRemoteResult(
-        final HttpResponse<byte[]> response, final Arguments arguments) {
+    public BodySubscriber<Optional<MaybeRecordWithTimestamp>> obtainRemoteResult(
+        final ResponseInfo response) {
         if (response.statusCode() != 200) {
-            return Optional.empty();
+            return HttpResponse.BodySubscribers.replacing(Optional.empty());
         }
-        final var record = RecordWithTimestamp.fromBytes(response.body());
-        return Optional.of(new MaybeRecordWithTimestamp(record));
+        return HttpResponse.BodySubscribers
+            .mapping(HttpResponse.BodySubscribers.ofByteArray(), body -> {
+                final var record = RecordWithTimestamp.fromBytes(body);
+                return Optional.of(new MaybeRecordWithTimestamp(record));
+            });
     }
 
     @Override
     public Response makeResponseForUser(
-        final List<MaybeRecordWithTimestamp> data, final Arguments arguments) {
+        final Collection<MaybeRecordWithTimestamp> data) {
         if (data.size() < arguments.getReplicasAck()) {
             return ResponseUtils.notEnoughReplicas();
         }
@@ -67,14 +71,13 @@ public class GetEntityRequestProcessor extends
     }
 
     @Override
-    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request,
-        final Arguments arguments) {
-        return super.preprocessRemote(request, arguments).GET();
+    public HttpRequest.Builder preprocessRemote(final HttpRequest.Builder request) {
+        return super.preprocessRemote(request).GET();
     }
 
     @Override
     public Response makeResponseForService(
-        final MaybeRecordWithTimestamp data, final Arguments arguments) {
+        final MaybeRecordWithTimestamp data) {
         return new Response(Response.OK, data.getRecord().toRawBytes());
     }
 

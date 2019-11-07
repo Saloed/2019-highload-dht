@@ -2,7 +2,6 @@ package ru.mail.polis.service.saloed.request.processor;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.PeekingIterator;
-import java.io.IOException;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
 import java.net.http.HttpResponse.BodySubscriber;
@@ -25,16 +24,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import one.nio.http.Response;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
 import ru.mail.polis.service.saloed.ClusterNodeRouter;
 import ru.mail.polis.service.saloed.IOExceptionLight;
-import ru.mail.polis.service.saloed.StreamHttpSession;
 import ru.mail.polis.service.saloed.payload.Payload;
 import ru.mail.polis.service.saloed.payload.RecordPayload;
 import ru.mail.polis.service.saloed.payload.RecordWithTimestampAndKeyPayload;
@@ -43,7 +38,6 @@ import ru.mail.polis.service.saloed.request.RequestUtils;
 public final class EntitiesRequestProcessor {
 
     public static final String REQUEST_PATH = "/v0/entities";
-    private static final Log log = LogFactory.getLog(Stub.class);
     private final ClusterNodeRouter clusterNodeRouter;
     private final DAOWithTimestamp dao;
 
@@ -56,39 +50,25 @@ public final class EntitiesRequestProcessor {
     /**
      * Retrieve range for service.
      *
-     * @param arguments     of request
-     * @param streamSession session for response
-     * @throws IOException if network error occurred
+     * @param arguments of request
+     * @return iterator over data
      */
-    public void processForService(
-        final Arguments arguments,
-        final StreamHttpSession streamSession) throws IOException {
-        performSingleNode(arguments, streamSession);
+    public CompletableFuture<Iterator<Payload>> processForService(
+        final Arguments arguments) {
+        final var iterator = dao.recordRange(arguments.start, arguments.end);
+        final var payloadIterator = Iterators.transform(iterator,
+            (record) -> (Payload) new RecordWithTimestampAndKeyPayload(record));
+        return CompletableFuture.completedFuture(payloadIterator);
     }
 
 
     /**
      * Retrieve range for user. Result range is a merged ranges from all nodes.
      *
-     * @param arguments     of request
-     * @param streamSession session for response
+     * @param arguments of request
+     * @return iterator over data
      */
-    public void processForUser(
-        final Arguments arguments, final StreamHttpSession streamSession) {
-        performNestedProcessing(arguments, streamSession);
-    }
-
-    private void performSingleNode(
-        final Arguments arguments,
-        final StreamHttpSession streamSession) throws IOException {
-        final var iterator = dao.recordRange(arguments.start, arguments.end);
-        final var payloadIterator = Iterators.transform(iterator,
-            (record) -> (Payload) new RecordWithTimestampAndKeyPayload(record));
-        streamSession.stream(payloadIterator);
-    }
-
-    private void performNestedProcessing(final Arguments arguments,
-        final StreamHttpSession streamSession) {
+    public CompletableFuture<Iterator<Payload>> processForUser(final Arguments arguments) {
         final var nodes = clusterNodeRouter.allNodes();
         final var iterators = new ArrayList<Iterator<RecordWithTimestampAndKey>>();
         final var futures = new ArrayList<CompletableFuture<Iterator<RecordWithTimestampAndKey>>>();
@@ -110,33 +90,17 @@ public final class EntitiesRequestProcessor {
             final var request = requestBuilder.GET().build();
             final var future = client
                 .sendAsync(request, new Stub())
-                .orTimeout(100, TimeUnit.MILLISECONDS)
                 .thenApply(HttpResponse::body);
             futures.add(future);
         }
-        CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
+        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
             .thenApply(__ -> {
                 final var futureResults = futures.stream().map(CompletableFuture::join);
                 final var allIterators = Stream.concat(futureResults, iterators.stream())
                     .collect(Collectors.toList());
                 final var mergedIterators = Iterators
                     .mergeSorted(allIterators, RecordWithTimestampAndKey::compareTo);
-                final var payloadIterator = new ReplicatedRecordsIterator(mergedIterators);
-                try {
-                    streamSession.stream(payloadIterator);
-                } catch (IOException e) {
-                    log.error("Error while streaming response");
-                }
-                return null;
-            })
-            .exceptionally(ex -> {
-                log.error("Error in entities", ex);
-                try {
-                    streamSession.sendError(Response.INTERNAL_ERROR, "");
-                } catch (IOException e) {
-                    log.error("Error while send response");
-                }
-                return null;
+                return new ReplicatedRecordsIterator(mergedIterators);
             });
     }
 
@@ -156,11 +120,13 @@ public final class EntitiesRequestProcessor {
         private ByteBuffer lastReceived = ByteBuffer.allocate(0);
         private Queue<RecordWithTimestampAndKey> records = new ConcurrentLinkedDeque<>();
         private Queue<CompletableFuture<Optional<RecordWithTimestampAndKey>>> nextOffers = new ConcurrentLinkedDeque<>();
+        private CompletableFuture<Void> initialized = new CompletableFuture<>();
         private Flow.Subscription subscription;
 
         @Override
         public void onSubscribe(Flow.Subscription subscription) {
             this.subscription = subscription;
+            initialized.complete(null);
         }
 
         private ByteBuffer extend(final ByteBuffer buffer, final ByteBuffer other) {
@@ -207,6 +173,7 @@ public final class EntitiesRequestProcessor {
             nextOffers.iterator().forEachRemaining(it -> it.completeExceptionally(throwable));
             nextOffers.clear();
             finished.set(true);
+            initialized.completeExceptionally(throwable);
         }
 
         @Override
@@ -241,20 +208,21 @@ public final class EntitiesRequestProcessor {
                 return CompletableFuture
                     .failedFuture(new IOExceptionLight("Response status is not OK"));
             }
-            final Iterator<Optional<RecordWithTimestampAndKey>> awaitIterator = Iterators
-                .transform(this, future -> {
-                    if (future == null) {
-                        return Optional.empty();
-                    }
-                    try {
-                        return future.get(100, TimeUnit.MILLISECONDS);
-                    } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                        return Optional.empty();
-                    }
-                });
-            final var nonEmptyIterator = Iterators.filter(awaitIterator, Optional::isPresent);
-            final var recordIterator = Iterators.transform(nonEmptyIterator, Optional::get);
-            return CompletableFuture.completedFuture(recordIterator);
+            return initialized.thenApply(__ -> {
+                final Iterator<Optional<RecordWithTimestampAndKey>> awaitIterator = Iterators
+                    .transform(this, future -> {
+                        if (future == null) {
+                            return Optional.empty();
+                        }
+                        try {
+                            return future.get(100, TimeUnit.MILLISECONDS);
+                        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                            return Optional.empty();
+                        }
+                    });
+                final var nonEmptyIterator = Iterators.filter(awaitIterator, Optional::isPresent);
+                return Iterators.transform(nonEmptyIterator, Optional::get);
+            });
         }
 
         @Override

@@ -36,6 +36,7 @@ public final class ServiceMetrics implements Closeable {
         this.server = server;
         timer = new Timer();
         initializeInfoLoop(timer);
+        reset();
     }
 
     void request() {
@@ -50,8 +51,24 @@ public final class ServiceMetrics implements Closeable {
         serviceRequest.incrementAndGet();
     }
 
+    void request(final boolean isServiceRequest) {
+        if (isServiceRequest) {
+            serviceRequest();
+        } else {
+            userRequest();
+        }
+    }
+
     void successResponse() {
         successResponse.incrementAndGet();
+    }
+
+    void successResponse(final boolean isServiceRequest) {
+        if (isServiceRequest) {
+            successServiceResponse();
+        } else {
+            successUserResponse();
+        }
     }
 
     void successUserResponse() {
@@ -163,7 +180,6 @@ public final class ServiceMetrics implements Closeable {
         @Override
         public void run() {
             log.info(metrics.getInfoString());
-            metrics.reset();
         }
     }
 
