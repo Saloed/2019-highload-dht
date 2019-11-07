@@ -137,8 +137,15 @@ public final class ClusterNodeRouter implements Closeable {
             return httpClient;
         }
 
-
-        public HttpRequest.Builder requestBuilder(final String path,
+        /**
+         * Return request builder for current node with given path and request params.
+         *
+         * @param path   of HTTP resource
+         * @param params of request
+         * @return request builder
+         */
+        public HttpRequest.Builder requestBuilder(
+            final String path,
             final Map<String, String> params) {
             String paramsStr = "";
             if (!params.isEmpty()) {
@@ -156,14 +163,14 @@ public final class ClusterNodeRouter implements Closeable {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(final Object o) {
             if (this == o) {
                 return true;
             }
             if (!(o instanceof ClusterNode)) {
                 return false;
             }
-            ClusterNode that = (ClusterNode) o;
+            final ClusterNode that = (ClusterNode) o;
             return type == that.type && endpoint.equals(that.endpoint);
         }
 
@@ -173,7 +180,7 @@ public final class ClusterNodeRouter implements Closeable {
         }
 
         @Override
-        public int compareTo(@NotNull ClusterNode o) {
+        public int compareTo(@NotNull final ClusterNode o) {
             return endpoint.compareTo(o.endpoint);
         }
     }

@@ -15,8 +15,17 @@ public final class RequestHandler implements Runnable {
     private final HttpSession session;
     private final Runnable runnable;
 
-    public RequestHandler(final ServiceMetrics metrics,
-        final HttpSession session, final Runnable runnable) {
+    /**
+     * HTTP request handler, which supports rejection handling.
+     *
+     * @param metrics  of service
+     * @param session  HTTP session
+     * @param runnable request handling code
+     */
+    public RequestHandler(
+        final ServiceMetrics metrics,
+        final HttpSession session,
+        final Runnable runnable) {
         this.metrics = metrics;
         this.session = session;
         this.runnable = runnable;

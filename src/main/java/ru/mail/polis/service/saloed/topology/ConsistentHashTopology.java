@@ -30,6 +30,11 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
     private final List<NodeWithNext<T>> nodesWithNext;
     private final RangeMap<Integer, NodeWithNext<T>> nodesTable;
 
+    /**
+     * Creates a topology for given nodes.
+     *
+     * @param nodes for topology
+     */
     public ConsistentHashTopology(final List<T> nodes) {
         this.nodes = nodes;
         this.nodesWithNext = initializeNext(nodes);
@@ -94,7 +99,7 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
     }
 
     @Override
-    public List<T> selectNode(@NotNull final ByteBuffer key, int replicas) {
+    public List<T> selectNode(@NotNull final ByteBuffer key, final int replicas) {
         final var keyHash = hash(key);
         final var node = nodesTable.get(keyHash);
         if (node == null) {
@@ -104,7 +109,7 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
     }
 
     @Override
-    public Topology<T> addNode(T node) {
+    public Topology<T> addNode(final T node) {
         final var newNodes = new ArrayList<>(nodes);
         newNodes.add(node);
         newNodes.sort(T::compareTo);
@@ -117,7 +122,7 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
         }
         final var newNode = newNodeOptional.get();
         final var newTable = rearrangeNodes(nodesTable, currentNodes, newNode);
-        return new ConsistentHashTopology<T>(newNodes, currentNodes, newTable);
+        return new ConsistentHashTopology<>(newNodes, currentNodes, newTable);
     }
 
     private RangeMap<Integer, NodeWithNext<T>> rearrangeNodes(
@@ -218,7 +223,7 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
         }
 
         @Override
-        public int compareTo(@NotNull NodeWithNext<T> o) {
+        public int compareTo(@NotNull final NodeWithNext<T> o) {
             return node.compareTo(o.node);
         }
 
@@ -228,14 +233,14 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(final Object o) {
             if (this == o) {
                 return true;
             }
             if (!(o instanceof NodeWithNext)) {
                 return false;
             }
-            NodeWithNext<?> that = (NodeWithNext<?>) o;
+            final NodeWithNext<?> that = (NodeWithNext<?>) o;
             return node.equals(that.node);
         }
 

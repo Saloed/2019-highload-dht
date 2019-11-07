@@ -43,6 +43,14 @@ public final class ServiceMetrics implements Closeable {
         request.incrementAndGet();
     }
 
+    void request(final boolean isServiceRequest) {
+        if (isServiceRequest) {
+            serviceRequest();
+        } else {
+            userRequest();
+        }
+    }
+
     void userRequest() {
         userRequest.incrementAndGet();
     }
@@ -51,13 +59,6 @@ public final class ServiceMetrics implements Closeable {
         serviceRequest.incrementAndGet();
     }
 
-    void request(final boolean isServiceRequest) {
-        if (isServiceRequest) {
-            serviceRequest();
-        } else {
-            userRequest();
-        }
-    }
 
     void successResponse() {
         successResponse.incrementAndGet();
@@ -169,7 +170,7 @@ public final class ServiceMetrics implements Closeable {
         timer.cancel();
     }
 
-    private final static class InfoTask extends TimerTask {
+    private static final class InfoTask extends TimerTask {
 
         private final ServiceMetrics metrics;
 

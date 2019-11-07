@@ -16,16 +16,11 @@ public final class RecordWithTimestampAndKey implements Comparable<RecordWithTim
     }
 
     /**
-     * Deserialize record from bytes.
+     * Check whether given buffer enough to deserialize record. Doesn't mutates input buffer.
      *
-     * @param bytes serialized record
+     * @param buffer serialized record
      * @return record
      */
-    public static RecordWithTimestampAndKey fromRawBytes(final byte[] bytes) {
-        final var buffer = ByteBuffer.wrap(bytes);
-        return fromRawBytes(buffer);
-    }
-
     public static boolean mayDeserialize(final ByteBuffer buffer) {
         if (buffer.remaining() < Integer.BYTES * 2) {
             return false;
@@ -36,6 +31,12 @@ public final class RecordWithTimestampAndKey implements Comparable<RecordWithTim
         return copy.remaining() >= keyLength + valueLength;
     }
 
+    /**
+     * Deserialize record from bytes. Mutates input buffer.
+     *
+     * @param buffer serialized record
+     * @return record
+     */
     public static RecordWithTimestampAndKey fromRawBytes(final ByteBuffer buffer) {
         final var keyLength = buffer.getInt();
         final var valueLength = buffer.getInt();
