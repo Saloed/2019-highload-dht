@@ -59,7 +59,6 @@ public final class ServiceMetrics implements Closeable {
         serviceRequest.incrementAndGet();
     }
 
-
     void successResponse() {
         successResponse.incrementAndGet();
     }

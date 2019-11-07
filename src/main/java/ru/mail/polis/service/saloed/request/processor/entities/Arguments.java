@@ -3,7 +3,7 @@ package ru.mail.polis.service.saloed.request.processor.entities;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-public class Arguments {
+public final class Arguments {
 
     private final String startStr;
     private final String endStr;

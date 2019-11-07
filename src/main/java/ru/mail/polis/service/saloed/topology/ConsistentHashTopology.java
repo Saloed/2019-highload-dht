@@ -27,27 +27,27 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
     private static final int PART_SIZE = 1 << 22;
     private static final int PARTS_NUMBER = 1 << (Integer.SIZE - 22);
     private final List<T> nodes;
-    private final List<NodeWithNext<T>> nodesWithNext;
     private final RangeMap<Integer, NodeWithNext<T>> nodesTable;
+
+    private ConsistentHashTopology(
+        final List<T> nodes,
+        final RangeMap<Integer, NodeWithNext<T>> nodesTable) {
+        this.nodes = nodes;
+        this.nodesTable = nodesTable;
+    }
 
     /**
      * Creates a topology for given nodes.
      *
      * @param nodes for topology
+     * @return topology
      */
-    public ConsistentHashTopology(final List<T> nodes) {
-        this.nodes = nodes;
-        this.nodesWithNext = initializeNext(nodes);
-        this.nodesTable = initializeTable(nodesWithNext);
-    }
-
-    private ConsistentHashTopology(
-        final List<T> nodes,
-        final List<NodeWithNext<T>> nodesWithNext,
-        final RangeMap<Integer, NodeWithNext<T>> nodesTable) {
-        this.nodes = nodes;
-        this.nodesWithNext = nodesWithNext;
-        this.nodesTable = nodesTable;
+    public static <T extends Comparable<T>> Topology<T> forNodes(final List<T> nodes) {
+        final var topologyNodes = new ArrayList<>(nodes);
+        topologyNodes.sort(T::compareTo);
+        final var nodesWithNext = initializeNext(topologyNodes);
+        final var nodesTable = initializeTable(nodesWithNext);
+        return new ConsistentHashTopology<>(topologyNodes, nodesTable);
     }
 
     private static <T> RangeMap<Integer, T> initializeTable(final List<T> nodes) {
@@ -122,7 +122,7 @@ public class ConsistentHashTopology<T extends Comparable<T>> implements Topology
         }
         final var newNode = newNodeOptional.get();
         final var newTable = rearrangeNodes(nodesTable, currentNodes, newNode);
-        return new ConsistentHashTopology<>(newNodes, currentNodes, newTable);
+        return new ConsistentHashTopology<>(newNodes, newTable);
     }
 
     private RangeMap<Integer, NodeWithNext<T>> rearrangeNodes(

@@ -60,7 +60,7 @@ public final class ClusterNodeRouter implements Closeable {
                 return new ClusterNode(type, client, node);
             })
             .collect(Collectors.toList());
-        final var clusterTopology = new ConsistentHashTopology<>(nodes);
+        final var clusterTopology = ConsistentHashTopology.forNodes(nodes);
         return new ClusterNodeRouter(clusterTopology, workersPool);
     }
 

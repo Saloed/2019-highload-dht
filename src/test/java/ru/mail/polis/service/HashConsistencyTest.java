@@ -18,7 +18,7 @@ class HashConsistencyTest extends TestBase {
 
     private Topology<Integer> createTopology(final int nodesAmount) {
         final var nodeList = IntStream.range(0, nodesAmount).boxed().collect(Collectors.toList());
-        return new ConsistentHashTopology<>(nodeList);
+        return ConsistentHashTopology.forNodes(nodeList);
     }
 
     @Test
