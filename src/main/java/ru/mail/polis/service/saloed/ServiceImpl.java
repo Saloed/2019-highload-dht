@@ -205,19 +205,11 @@ public final class ServiceImpl extends HttpServer implements Service {
         final var handler = new RequestHandler(metrics, session, () -> {
             final var processor = new EntitiesRequestProcessor(clusterNodeRouter, dao);
             metrics.request(arguments.isServiceRequest());
-            final var result = arguments.isServiceRequest()
-                ? processor.processForService(arguments)
-                : processor.processForUser(arguments);
-            result
-                .thenAccept(recordIterator -> {
-                    response(streamSession, recordIterator);
-                    metrics.successResponse(arguments.isServiceRequest());
-                })
-                .exceptionally(__ -> {
-                    metrics.errorResponse();
-                    response(streamSession, Response.INTERNAL_ERROR);
-                    return null;
-                });
+            if (arguments.isServiceRequest()) {
+                processor.processForService(arguments, streamSession);
+            } else {
+                processor.processForUser(arguments, streamSession);
+            }
         });
         asyncExecute(handler);
     }
@@ -246,17 +238,6 @@ public final class ServiceImpl extends HttpServer implements Service {
     private void response(final HttpSession session, final String resultCode, final byte[] body) {
         final var response = new Response(resultCode, body);
         response(session, response);
-    }
-
-    private void response(final StreamHttpSession session, final Iterator<Payload> data) {
-        metrics.responseWithStatus(200);
-        try {
-            session.stream(data);
-        } catch (IOException exception) {
-            session.close();
-            metrics.errorResponse();
-            log.error("Error during stream response", exception);
-        }
     }
 
     private void response(final HttpSession session, final Response response) {

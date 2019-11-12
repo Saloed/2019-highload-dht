@@ -1,10 +1,12 @@
 package ru.mail.polis.service.saloed;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Iterator;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Flow;
+import java.util.concurrent.Flow.Subscription;
 import one.nio.http.HttpServer;
 import one.nio.http.HttpSession;
 import one.nio.http.Response;
@@ -13,37 +15,18 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import ru.mail.polis.service.saloed.payload.Payload;
 
-public final class StreamHttpSession extends HttpSession {
+public final class StreamHttpSession extends HttpSession implements Flow.Subscriber<Payload> {
 
     private static final Log log = LogFactory.getLog(StreamHttpSession.class);
 
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.UTF_8);
     private static final byte[] EMPTY = "0\r\n\r\n".getBytes(StandardCharsets.UTF_8);
 
-    private Iterator<Payload> recordIterator;
+    private Subscription subscription;
+    private Queue<Payload> streamQueue = new ConcurrentLinkedQueue<>();
 
     StreamHttpSession(final Socket socket, final HttpServer server) {
         super(socket, server);
-    }
-
-    /**
-     * Start streaming data from iterator as chunked data.
-     *
-     * @param recordIterator with data
-     * @throws IOException if network errors occurred
-     */
-    public synchronized void stream(final Iterator<Payload> recordIterator) throws IOException {
-        this.recordIterator = recordIterator;
-        if (handling == null) {
-            throw new IOExceptionLight("Out of order response");
-        }
-        final var response = new Response(Response.OK);
-        response.addHeader(keepAlive() ? "Connection: Keep-Alive" : "Connection: close");
-        response.addHeader("Transfer-Encoding: chunked");
-
-        writeResponse(response, false);
-
-        next();
     }
 
     @Override
@@ -92,25 +75,70 @@ public final class StreamHttpSession extends HttpSession {
         }
     }
 
-    private synchronized void next() throws IOException {
-        if (recordIterator == null) {
-            throw new IllegalStateException("Iterator is missing");
+    private void handleStreamStart() throws IOException {
+        if (handling == null) {
+            throw new IOExceptionLight("Out of order response");
         }
-        while (recordIterator.hasNext() && queueHead == null) {
-            final var record = recordIterator.next();
+        final var response = new Response(Response.OK);
+        response.addHeader(keepAlive() ? "Connection: Keep-Alive" : "Connection: close");
+        response.addHeader("Transfer-Encoding: chunked");
+
+        writeResponse(response, false);
+    }
+
+    @Override
+    public void onSubscribe(final Subscription subscription) {
+        this.subscription = subscription;
+        try {
+            handleStreamStart();
+        } catch (IOException ex) {
+            log.error("Unable to start stream", ex);
+            handleUnexpectedStreamEnding();
+            return;
+        }
+        subscription.request(1);
+    }
+
+    private void handleUnexpectedStreamEnding() {
+        subscription.cancel();
+        // todo
+    }
+
+    private void next() throws IOException {
+        while (!streamQueue.isEmpty() && queueHead == null) {
+            final var record = streamQueue.poll();
             writeRecord(record);
         }
-        if (!recordIterator.hasNext()) {
-            handleStreamEnding();
-            if (recordIterator instanceof Closeable) {
-                try {
-                    ((Closeable) recordIterator).close();
-                } catch (IOException exception) {
-                    log.error("Exception while close iterator", exception);
-                }
-            }
-            recordIterator = null;
+        if (streamQueue.isEmpty()) {
+            subscription.request(1);
         }
     }
 
+
+    @Override
+    public void onNext(final Payload item) {
+        streamQueue.add(item);
+        try {
+            next();
+        } catch (IOException ex) {
+            log.error("Unable to write element to stream", ex);
+            handleUnexpectedStreamEnding();
+        }
+    }
+
+    @Override
+    public void onError(final Throwable throwable) {
+        log.error("Error while streaming", throwable);
+        handleUnexpectedStreamEnding();
+    }
+
+    @Override
+    public void onComplete() {
+        try {
+            handleStreamEnding();
+        } catch (IOException ex) {
+            log.error("Unable to end stream", ex);
+            handleUnexpectedStreamEnding();
+        }
+    }
 }
