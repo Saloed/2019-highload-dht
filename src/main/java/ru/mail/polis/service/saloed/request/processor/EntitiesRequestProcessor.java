@@ -2,23 +2,23 @@ package ru.mail.polis.service.saloed.request.processor;
 
 import com.google.common.collect.Iterators;
 import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodySubscribers;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow.Publisher;
 import java.util.concurrent.Flow.Subscriber;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
 import ru.mail.polis.service.saloed.ClusterNodeRouter;
+import ru.mail.polis.service.saloed.IOExceptionLight;
+import ru.mail.polis.service.saloed.flow.IteratorPublisher;
+import ru.mail.polis.service.saloed.flow.SortedMergeProcessor;
 import ru.mail.polis.service.saloed.payload.Payload;
 import ru.mail.polis.service.saloed.payload.RecordWithTimestampAndKeyPayload;
 import ru.mail.polis.service.saloed.request.RequestUtils;
 import ru.mail.polis.service.saloed.request.processor.entities.Arguments;
-import ru.mail.polis.service.saloed.request.processor.entities.BodyHandlerStub;
-import ru.mail.polis.service.saloed.request.processor.entities.PayloadIteratorPublisher;
-import ru.mail.polis.service.saloed.request.processor.entities.ReplicatedRecordsIterator;
+import ru.mail.polis.service.saloed.request.processor.entities.RecordsFromBytesProcessor;
+import ru.mail.polis.service.saloed.request.processor.entities.ReplicatedRecordsProcessor;
 
 public final class EntitiesRequestProcessor {
 
@@ -43,7 +43,7 @@ public final class EntitiesRequestProcessor {
         final var iterator = dao.recordRange(arguments.getStart(), arguments.getEnd());
         final var payloadIterator = Iterators.transform(iterator,
             (record) -> (Payload) new RecordWithTimestampAndKeyPayload(record));
-        final var publisher = new PayloadIteratorPublisher(payloadIterator);
+        final var publisher = new IteratorPublisher<>(payloadIterator);
         publisher.subscribe(subscriber);
     }
 
@@ -56,45 +56,46 @@ public final class EntitiesRequestProcessor {
     public void processForUser(final Arguments arguments,
         final Subscriber<Payload> subscriber) {
         final var nodes = clusterNodeRouter.allNodes();
-        final var iterators = new ArrayList<Iterator<RecordWithTimestampAndKey>>();
-        final var futures = new ArrayList<CompletableFuture<Iterator<RecordWithTimestampAndKey>>>();
+        final Map<String, String> requestParams;
+        if (arguments.hasEnd()) {
+            requestParams = Map.of(
+                "start", arguments.getStartStr(),
+                "end", arguments.getEndStr());
+        } else {
+            requestParams = Map.of("start", arguments.getStartStr());
+        }
+        final var publishers = new ArrayList<Publisher<RecordWithTimestampAndKey>>(nodes.size());
         for (final var node : nodes) {
             if (node.isLocal()) {
-                final var iterator = dao.recordRange(arguments.getStart(), arguments.getEnd());
-                iterators.add(iterator);
                 continue;
             }
             final var client = node.getHttpClient();
-            final Map<String, String> requestParams;
-            if (arguments.hasEnd()) {
-                requestParams = Map.of(
-                    "start", arguments.getStartStr(),
-                    "end", arguments.getEndStr());
-            } else {
-                requestParams = Map.of("start", arguments.getStartStr());
-            }
             var requestBuilder = node.requestBuilder(REQUEST_PATH, requestParams);
             requestBuilder = RequestUtils.setRequestFromService(requestBuilder);
             final var request = requestBuilder.GET().build();
-            final var future = client
-                .sendAsync(request, new BodyHandlerStub())
-                .thenApply(HttpResponse::body);
-            futures.add(future);
+            final var recordProcessor = new RecordsFromBytesProcessor();
+            client
+                .sendAsync(request, responseInfo -> {
+                    if (responseInfo.statusCode() != 200) {
+                        recordProcessor.onError(new IOExceptionLight("Response status is not OK"));
+                        return BodySubscribers.discarding();
+                    }
+                    return BodySubscribers.fromSubscriber(recordProcessor);
+                })
+                .thenApply(HttpResponse::body)
+                .exceptionally(ex -> {
+                    recordProcessor.onError(ex);
+                    return null;
+                });
+            publishers.add(recordProcessor);
         }
-        CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-            .thenApply(__ -> {
-                final var futureResults = futures.stream().map(CompletableFuture::join);
-                final var allIterators = Stream.concat(futureResults, iterators.stream())
-                    .collect(Collectors.toList());
-                final var mergedIterators = Iterators
-                    .mergeSorted(allIterators, RecordWithTimestampAndKey::compareTo);
-                final var iterator = new ReplicatedRecordsIterator(mergedIterators);
-                final var publisher = new PayloadIteratorPublisher(iterator);
-                publisher.subscribe(subscriber);
-                return null;
-            }).exceptionally(ex -> {
-            throw new RuntimeException("Iterator", ex);
-        });
+        final var iterator = dao.recordRange(arguments.getStart(), arguments.getEnd());
+        final var localPublisher = new IteratorPublisher<>(iterator);
+        publishers.add(localPublisher);
+        final var mergedPublisher = SortedMergeProcessor.subscribeOn(publishers);
+        final var resultPublisher = new ReplicatedRecordsProcessor();
+        mergedPublisher.subscribe(resultPublisher);
+        resultPublisher.subscribe(subscriber);
     }
 
 }
