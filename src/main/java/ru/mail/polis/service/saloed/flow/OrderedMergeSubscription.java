@@ -1,0 +1,201 @@
+package ru.mail.polis.service.saloed.flow;
+
+import com.google.common.collect.Streams;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Flow.Publisher;
+import java.util.concurrent.Flow.Subscriber;
+import java.util.concurrent.Flow.Subscription;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
+final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscription {
+
+    private final Subscriber<? super T> subscriber;
+    private final List<OrderedMergeSourceSubscriber<T>> sources;
+    private final ArrayList<SourceValue<T>> values;
+    private final AtomicReference<Throwable> error = new AtomicReference<>();
+    private final AtomicBoolean cancelled = new AtomicBoolean();
+    private final AtomicLong requested = new AtomicLong();
+    private final AtomicLong emitted = new AtomicLong();
+    private final AtomicInteger wip = new AtomicInteger();
+
+
+    OrderedMergeSubscription(final Subscriber<? super T> subscriber, int n) {
+        this.subscriber = subscriber;
+        this.sources = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            final var source = new OrderedMergeSourceSubscriber<>(this);
+            this.sources.add(source);
+        }
+        this.values = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            values.add(SourceValue.empty());
+        }
+    }
+
+    void subscribe(final List<Publisher<T>> sources) {
+        Streams.forEachPair(this.sources.stream(), sources.stream(),
+            (subscriber, source) -> source.subscribe(subscriber));
+    }
+
+    @Override
+    public void request(long n) {
+        requested.addAndGet(n);
+        publish();
+    }
+
+    @Override
+    public void cancel() {
+        if (cancelled.compareAndSet(false, true)) {
+            for (final var source : sources) {
+                source.cancel();
+            }
+            wip.getAndIncrement();
+        }
+    }
+
+    void onSourceError(final Throwable ex) {
+        error.set(ex);
+        publish();
+    }
+
+    private void whenComplete() {
+        final var ex = error.get();
+        if (ex == null) {
+            subscriber.onComplete();
+        } else {
+            subscriber.onError(ex);
+        }
+    }
+
+    void publish() {
+        if (wip.getAndIncrement() != 0) {
+            return;
+        }
+
+        int missed = 1;
+        long emitted = this.emitted.get();
+        do {
+            long requested = this.requested.get();
+            while (true) {
+                if (cancelled.get()) {
+                    return;
+                }
+                if (error.get() != null) {
+                    subscriber.onError(error.get());
+                }
+                final var valuesStats = actualizeValues();
+                if (valuesStats.done == sources.size()) {
+                    whenComplete();
+                    return;
+                }
+                if (valuesStats.ready != sources.size() || emitted >= requested) {
+                    break;
+                }
+                final var minIndex = indexOfMinimal();
+                final var min = values.get(minIndex).value;
+                values.set(minIndex, SourceValue.empty());
+                subscriber.onNext(min);
+
+                emitted++;
+                sources.get(minIndex).request(1);
+            }
+
+            this.emitted.set(emitted);
+            missed = wip.addAndGet(-missed);
+        } while (missed != 0);
+    }
+
+    private SourceValueStats actualizeValues() {
+        final var stats = new SourceValueStats();
+        for (int i = 0; i < sources.size(); i++) {
+            final var value = values.get(i);
+            if (value.isDone()) {
+                stats.done++;
+                stats.ready++;
+            } else if (value.isEmpty()) {
+                final var source = sources.get(i);
+                final var sourceExhausted = source.done.get();
+                final var item = source.poll();
+                if (item != null) {
+                    values.set(i, SourceValue.value(item));
+                    stats.ready++;
+                } else if (sourceExhausted) {
+                    values.set(i, SourceValue.done());
+                    stats.done++;
+                    stats.ready++;
+                }
+            } else {
+                stats.ready++;
+            }
+        }
+        return stats;
+    }
+
+    private int indexOfMinimal() {
+        T min = null;
+        int minIndex = -1;
+        for (int i = 0; i < values.size(); i++) {
+            final var value = values.get(i);
+            if (value.isDone() || value.isEmpty()) {
+                continue;
+            }
+            final var smaller = min == null || min.compareTo(value.value) > 0;
+            if (smaller) {
+                min = value.value;
+                minIndex = i;
+            }
+        }
+        return minIndex;
+    }
+
+    private enum SourceValueType {
+        VALUE, EMPTY, DONE
+    }
+
+    private static final class SourceValueStats {
+
+        int done = 0;
+        int ready = 0;
+    }
+
+    private static final class SourceValue<T> {
+
+        static final SourceValue<?> EMPTY = new SourceValue<>(SourceValueType.EMPTY, null);
+        static final SourceValue<?> DONE = new SourceValue<>(SourceValueType.DONE, null);
+
+        final SourceValueType type;
+        final T value;
+
+        private SourceValue(final SourceValueType type, final T value) {
+            this.type = type;
+            this.value = value;
+        }
+
+        static <T> SourceValue<T> empty() {
+            @SuppressWarnings("unchecked") final SourceValue<T> empty = (SourceValue<T>) EMPTY;
+            return empty;
+        }
+
+        static <T> SourceValue<T> done() {
+            @SuppressWarnings("unchecked") final SourceValue<T> done = (SourceValue<T>) DONE;
+            return done;
+        }
+
+        static <T> SourceValue<T> value(final T value) {
+            return new SourceValue<>(SourceValueType.VALUE, value);
+        }
+
+        boolean isEmpty() {
+            return type == SourceValueType.EMPTY;
+        }
+
+        boolean isDone() {
+            return type == SourceValueType.DONE;
+        }
+    }
+
+}

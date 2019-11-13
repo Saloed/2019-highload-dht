@@ -12,7 +12,7 @@ import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
 import ru.mail.polis.service.saloed.ClusterNodeRouter;
 import ru.mail.polis.service.saloed.IOExceptionLight;
 import ru.mail.polis.service.saloed.flow.IteratorPublisher;
-import ru.mail.polis.service.saloed.flow.SortedMergeProcessor;
+import ru.mail.polis.service.saloed.flow.OrderedMergeProcessor;
 import ru.mail.polis.service.saloed.payload.Payload;
 import ru.mail.polis.service.saloed.payload.RecordWithTimestampAndKeyPayload;
 import ru.mail.polis.service.saloed.request.RequestUtils;
@@ -92,7 +92,7 @@ public final class EntitiesRequestProcessor {
         final var iterator = dao.recordRange(arguments.getStart(), arguments.getEnd());
         final var localPublisher = new IteratorPublisher<>(iterator);
         publishers.add(localPublisher);
-        final var mergedPublisher = SortedMergeProcessor.subscribeOn(publishers);
+        final var mergedPublisher = OrderedMergeProcessor.merge(publishers);
         final var resultPublisher = new ReplicatedRecordsProcessor();
         mergedPublisher.subscribe(resultPublisher);
         resultPublisher.subscribe(subscriber);

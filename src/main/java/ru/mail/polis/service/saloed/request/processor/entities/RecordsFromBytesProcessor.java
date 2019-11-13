@@ -2,29 +2,17 @@ package ru.mail.polis.service.saloed.request.processor.entities;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.Flow;
-import java.util.concurrent.Flow.Processor;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Flow.Publisher;
+import java.util.concurrent.atomic.AtomicLong;
 import ru.mail.polis.dao.ByteBufferUtils;
 import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
-import ru.mail.polis.service.saloed.flow.SingleSubscriberPublisher;
+import ru.mail.polis.service.saloed.flow.SingleSubscriberProcessor;
 
-public class RecordsFromBytesProcessor extends SingleSubscriberPublisher<RecordWithTimestampAndKey>
-    implements Processor<List<ByteBuffer>, RecordWithTimestampAndKey> {
+public class RecordsFromBytesProcessor extends
+    SingleSubscriberProcessor<List<ByteBuffer>, RecordWithTimestampAndKey> {
 
-    private static final int FETCH_SIZE = 32;
-
-    private final Queue<RecordWithTimestampAndKey> records = new ConcurrentLinkedDeque<>();
-    private final AtomicBoolean finished = new AtomicBoolean(false);
     private ByteBuffer lastReceived = ByteBuffer.allocate(0);
-    private Flow.Subscription subscription;
-
-    @Override
-    public void onSubscribe(final Flow.Subscription subscription) {
-        this.subscription = subscription;
-    }
+    private AtomicLong requested = new AtomicLong(0);
 
     private ByteBuffer extend(final ByteBuffer buffer, final ByteBuffer other) {
         return ByteBuffer.allocate(buffer.remaining() + other.remaining())
@@ -47,44 +35,21 @@ public class RecordsFromBytesProcessor extends SingleSubscriberPublisher<RecordW
             lastReceived = extend(lastReceived, buffer);
             while (RecordWithTimestampAndKey.mayDeserialize(lastReceived)) {
                 final var record = RecordWithTimestampAndKey.fromRawBytes(lastReceived);
-                records.add(record);
+                requested.getAndDecrement();
+                subscriber.onNext(record);
             }
             lastReceived = truncate(lastReceived);
         }
-        if (records.isEmpty()) {
-            subscription.request(FETCH_SIZE);
-            return;
+        if (requested.get() > 0) {
+            source.request(1);
         }
-        publish();
     }
 
     @Override
-    public void onError(final Throwable throwable) {
-        error = throwable;
-        publish();
-    }
-
-    @Override
-    public void onComplete() {
-        finished.set(true);
-    }
-
-    @Override
-    protected EmitStatus emit() {
-        if (records.isEmpty()) {
-            subscription.request(FETCH_SIZE);
-            return EmitStatus.CANCEL;
+    public void request(long n) {
+        final var current = requested.getAndAdd(n);
+        if (current == 0L) {
+            source.request(1);
         }
-        final var next = records.poll();
-        if (next == null) {
-            return EmitStatus.TRY_AGAIN;
-        }
-        subscriber.onNext(next);
-        return EmitStatus.SUCCESS;
-    }
-
-    @Override
-    protected boolean isFinished() {
-        return finished.get() && records.isEmpty();
     }
 }
