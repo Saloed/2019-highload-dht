@@ -1,10 +1,11 @@
 # Ignore everything
 *
 
-# But not Java files...
+# But not specified files...
 !.gitignore
 !*.java
 !*.lua
+!*.py
 !README.md
 !LICENSE
 !gradlew.bat
