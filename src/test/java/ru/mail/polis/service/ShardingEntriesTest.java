@@ -23,16 +23,37 @@ class ShardingEntriesTest extends ShardingTest {
 
     private static final Duration TIMEOUT = Duration.ofMinutes(1);
 
-    private List<Chunk> fullFillCluster(final int entriesCount) {
+    @RepeatedTest(10)
+    void allEntriesExists() {
+        checkCorrectness(10000, 1, new AllChunksPartitioner());
+    }
+
+    @RepeatedTest(10)
+    void rangeEntriesCorrect() {
+        checkCorrectness(10000, 1, new ChunkPartitioner());
+    }
+
+    @RepeatedTest(10)
+    void allReplicatedEntriesExists() {
+        checkCorrectness(10000, 2, new AllChunksPartitioner());
+    }
+
+    @RepeatedTest(10)
+    void rangeReplicatedEntriesCorrect() {
+        checkCorrectness(10000, 2, new ChunkPartitioner());
+    }
+
+
+    private List<Chunk> fullFillCluster(final int entriesCount, final int replicas) {
         final var chunks = new HashSet<Chunk>();
         for (int i = 0; i < entriesCount; i++) {
             final var key = randomId();
             final var value = randomValue();
             final var chunk = new Chunk(key, value);
             chunks.add(chunk);
-            final var nodeId = ThreadLocalRandom.current().nextInt(0, 1);
+            final var nodeId = ThreadLocalRandom.current().nextInt(0, endpoints.size() - 1);
             assertTimeoutPreemptively(TIMEOUT, () -> {
-                assertEquals(201, upsert(nodeId, key, value, 1, 1).getStatus());
+                assertEquals(201, upsert(nodeId, key, value, replicas, replicas).getStatus());
             });
         }
         return new ArrayList<>(chunks);
@@ -48,47 +69,63 @@ class ShardingEntriesTest extends ShardingTest {
         return resultBuffer.array();
     }
 
-    @RepeatedTest(10)
-    void allEntriesExists() {
-        final var chunks = fullFillCluster(10000);
+    private void checkCorrectness(
+        final int totalRecords,
+        final int replicationFactor,
+        final ChunkPartitioner partitioner) {
+        final var chunks = fullFillCluster(totalRecords, replicationFactor);
         chunks.sort(Chunk::compareTo);
-        final var expectedBytes = joinChunksBytes(chunks);
-        assertTimeoutPreemptively(TIMEOUT, () -> {
-            final Response response = range(0, chunks.get(0).key, null);
-            assertEquals(200, response.getStatus());
-            final var body = response.getBody();
-            assertArrayEquals(expectedBytes, body);
-        });
-        assertTimeoutPreemptively(TIMEOUT, () -> {
-            final Response response = range(1, chunks.get(0).key, null);
-            assertEquals(200, response.getStatus());
-            final var body = response.getBody();
-            assertArrayEquals(expectedBytes, body);
-        });
+        final var partition = partitioner.fromChunks(chunks);
+        final var expectedBytes = joinChunksBytes(partition.expectedChunks);
+        for (int i = 0; i < endpoints.size(); i++) {
+            assertTimeoutPreemptively(TIMEOUT, () -> {
+                final Response response = range(1, partition.rangeStart, partition.rangeEnd);
+                assertEquals(200, response.getStatus());
+                final var body = response.getBody();
+                assertArrayEquals(expectedBytes, body);
+            });
+        }
     }
 
-    @RepeatedTest(10)
-    void rangeEntriesCorrect() {
-        final var chunks = fullFillCluster(10000);
-        chunks.sort(Chunk::compareTo);
-        final var splitIdx = ThreadLocalRandom.current().nextInt(1, chunks.size() / 4);
-        final var rangeFrom = chunks.get(splitIdx);
-        final var rangeTo = chunks.get(chunks.size() - splitIdx);
-        final var expectedChunks = chunks.subList(splitIdx, chunks.size() - splitIdx);
-        final var expectedBytes = joinChunksBytes(expectedChunks);
-        assertTimeoutPreemptively(TIMEOUT, () -> {
-            final Response response = range(0, rangeFrom.key, rangeTo.key);
-            assertEquals(200, response.getStatus());
-            final var body = response.getBody();
-            assertArrayEquals(expectedBytes, body);
-        });
-        assertTimeoutPreemptively(TIMEOUT, () -> {
-            final Response response = range(1, rangeFrom.key, rangeTo.key);
-            assertEquals(200, response.getStatus());
-            final var body = response.getBody();
-            assertArrayEquals(expectedBytes, body);
-        });
+    private static class ChunkPartitioner {
+
+        ChunkPartition fromChunks(final List<Chunk> chunks) {
+            final var splitIdx = ThreadLocalRandom.current().nextInt(1, chunks.size() / 4);
+            final var rangeFrom = chunks.get(splitIdx);
+            final var rangeTo = chunks.get(chunks.size() - splitIdx);
+            final var expectedChunks = chunks.subList(splitIdx, chunks.size() - splitIdx);
+            return new ChunkPartition(rangeFrom.key, rangeTo.key, chunks, expectedChunks);
+        }
+
     }
+
+    private static class AllChunksPartitioner extends ChunkPartitioner {
+
+        @Override
+        ChunkPartition fromChunks(final List<Chunk> chunks) {
+            return new ChunkPartition(chunks.get(0).key, null, chunks, chunks);
+        }
+    }
+
+    private static class ChunkPartition {
+
+        final String rangeStart;
+        final String rangeEnd;
+        final List<Chunk> chunks;
+        final List<Chunk> expectedChunks;
+
+        ChunkPartition(
+            final String rangeStart,
+            final String rangeEnd,
+            final List<Chunk> chunks,
+            final List<Chunk> expectedChunks) {
+            this.rangeStart = rangeStart;
+            this.rangeEnd = rangeEnd;
+            this.chunks = chunks;
+            this.expectedChunks = expectedChunks;
+        }
+    }
+
 
     private static class Chunk implements Comparable<Chunk> {
 

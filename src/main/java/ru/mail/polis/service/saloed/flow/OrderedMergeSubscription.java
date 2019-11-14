@@ -157,7 +157,6 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     }
 
     private static final class SourceValueStats {
-
         int done = 0;
         int ready = 0;
     }
