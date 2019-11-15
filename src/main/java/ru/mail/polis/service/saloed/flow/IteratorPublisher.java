@@ -45,22 +45,38 @@ public final class IteratorPublisher<T> implements Publisher<T>, Subscription {
         canceled.set(true);
     }
 
+    private int emitFromIterator(final int currentEmitted, final long currentRequested) {
+        int emitted = currentEmitted;
+        while (iterator.hasNext() && emitted != currentRequested) {
+            if (canceled.get()) {
+                return emitted;
+            }
+            this.subscriber.onNext(iterator.next());
+            emitted++;
+        }
+        return emitted;
+    }
+
+    private boolean isFinished() {
+        if (iterator.hasNext()) {
+            return false;
+        }
+        if (!canceled.get()) {
+            canceled.set(true);
+            this.subscriber.onComplete();
+        }
+        return true;
+    }
+
     private void emit(final long requestEmit) {
         long currentRequested = requestEmit;
         int emitted = 0;
         while (true) {
-            while (iterator.hasNext() && emitted != currentRequested) {
-                if (canceled.get()) {
-                    return;
-                }
-                this.subscriber.onNext(iterator.next());
-                emitted++;
+            emitted = emitFromIterator(emitted, currentRequested);
+            if (canceled.get()) {
+                return;
             }
-            if (!iterator.hasNext()) {
-                if (!canceled.get()) {
-                    canceled.set(true);
-                    this.subscriber.onComplete();
-                }
+            if (isFinished()) {
                 return;
             }
             final long freshRequested = requested.get();
