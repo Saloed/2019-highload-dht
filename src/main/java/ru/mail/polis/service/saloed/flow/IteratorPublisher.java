@@ -34,8 +34,8 @@ public final class IteratorPublisher<T> implements Publisher<T>, Subscription {
             subscriber.onError(new IllegalArgumentException("Requested amount is below zero"));
             return;
         }
-        final long requested = this.requested.getAndAdd(n);
-        if (requested == 0L) {
+        final long previousRequested = this.requested.getAndAdd(n);
+        if (previousRequested == 0L) {
             emit(this.requested.get());
         }
     }

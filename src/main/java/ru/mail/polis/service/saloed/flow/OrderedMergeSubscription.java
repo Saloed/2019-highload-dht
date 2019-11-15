@@ -38,7 +38,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
 
     void subscribe(final List<Publisher<T>> sources) {
         Streams.forEachPair(this.sources.stream(), sources.stream(),
-            (subscriber, source) -> source.subscribe(subscriber));
+            (sub, source) -> source.subscribe(sub));
     }
 
     @Override
@@ -77,9 +77,9 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
         }
 
         int missed = 1;
-        long emitted = this.emitted.get();
+        long currentEmitted = this.emitted.get();
         do {
-            final long requested = this.requested.get();
+            final long currentRequested = this.requested.get();
             while (true) {
                 if (cancelled.get()) {
                     return;
@@ -92,7 +92,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
                     whenComplete();
                     return;
                 }
-                if (valuesStats.ready != sources.size() || emitted >= requested) {
+                if (valuesStats.ready != sources.size() || currentEmitted >= currentRequested) {
                     break;
                 }
                 final var minIndex = indexOfMinimal();
@@ -100,11 +100,11 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
                 values.set(minIndex, SourceValue.empty());
                 subscriber.onNext(min);
 
-                emitted++;
+                currentEmitted++;
                 sources.get(minIndex).request(1);
             }
 
-            this.emitted.set(emitted);
+            this.emitted.set(currentEmitted);
             missed = wip.addAndGet(-missed);
         } while (missed != 0);
     }
@@ -121,7 +121,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
                 final var sourceExhausted = source.done.get();
                 final var item = source.poll();
                 if (item != null) {
-                    values.set(i, SourceValue.value(item));
+                    values.set(i, SourceValue.of(item));
                     stats.ready++;
                 } else if (sourceExhausted) {
                     values.set(i, SourceValue.done());
@@ -163,8 +163,8 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
 
     private static final class SourceValue<T> {
 
-        static final SourceValue<?> EMPTY = new SourceValue<>(SourceValueType.EMPTY, null);
-        static final SourceValue<?> DONE = new SourceValue<>(SourceValueType.DONE, null);
+        static final SourceValue<?> EMPTY_VALUE = new SourceValue<>(SourceValueType.EMPTY, null);
+        static final SourceValue<?> SOURCE_DONE = new SourceValue<>(SourceValueType.DONE, null);
 
         final SourceValueType type;
         final T value;
@@ -175,16 +175,16 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
         }
 
         static <T> SourceValue<T> empty() {
-            @SuppressWarnings("unchecked") final SourceValue<T> empty = (SourceValue<T>) EMPTY;
+            @SuppressWarnings("unchecked") final SourceValue<T> empty = (SourceValue<T>) EMPTY_VALUE;
             return empty;
         }
 
         static <T> SourceValue<T> done() {
-            @SuppressWarnings("unchecked") final SourceValue<T> done = (SourceValue<T>) DONE;
+            @SuppressWarnings("unchecked") final SourceValue<T> done = (SourceValue<T>) SOURCE_DONE;
             return done;
         }
 
-        static <T> SourceValue<T> value(final T value) {
+        static <T> SourceValue<T> of(final T value) {
             return new SourceValue<>(SourceValueType.VALUE, value);
         }
 
