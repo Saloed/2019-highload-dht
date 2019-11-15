@@ -71,39 +71,46 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
         }
     }
 
+    private long emit(final long emitted) {
+        final long currentRequested = this.requested.get();
+        long currentEmitted = emitted;
+        while (true) {
+            if (cancelled.get()) {
+                return -1;
+            }
+            if (error.get() != null) {
+                subscriber.onError(error.get());
+            }
+            final var valuesStats = actualizeValues();
+            if (valuesStats.done == sources.size()) {
+                whenComplete();
+                return -1;
+            }
+            if (valuesStats.ready != sources.size() || currentEmitted >= currentRequested) {
+                break;
+            }
+            final var minIndex = indexOfMinimal();
+            final var min = values.get(minIndex).value;
+            values.set(minIndex, SourceValue.empty());
+            subscriber.onNext(min);
+
+            currentEmitted++;
+            sources.get(minIndex).request(1);
+        }
+        return currentEmitted;
+    }
+
     void publish() {
         if (wip.getAndIncrement() != 0) {
             return;
         }
-
         int missed = 1;
         long currentEmitted = this.emitted.get();
         do {
-            final long currentRequested = this.requested.get();
-            while (true) {
-                if (cancelled.get()) {
-                    return;
-                }
-                if (error.get() != null) {
-                    subscriber.onError(error.get());
-                }
-                final var valuesStats = actualizeValues();
-                if (valuesStats.done == sources.size()) {
-                    whenComplete();
-                    return;
-                }
-                if (valuesStats.ready != sources.size() || currentEmitted >= currentRequested) {
-                    break;
-                }
-                final var minIndex = indexOfMinimal();
-                final var min = values.get(minIndex).value;
-                values.set(minIndex, SourceValue.empty());
-                subscriber.onNext(min);
-
-                currentEmitted++;
-                sources.get(minIndex).request(1);
+            currentEmitted = emit(currentEmitted);
+            if (currentEmitted == -1) {
+                return;
             }
-
             this.emitted.set(currentEmitted);
             missed = wip.addAndGet(-missed);
         } while (missed != 0);
@@ -123,7 +130,9 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
                 if (item != null) {
                     values.set(i, SourceValue.of(item));
                     stats.ready++;
-                } else if (sourceExhausted) {
+                    continue;
+                }
+                if (sourceExhausted) {
                     values.set(i, SourceValue.done());
                     stats.done++;
                     stats.ready++;
@@ -157,6 +166,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     }
 
     private static final class SourceValueStats {
+
         int done;
         int ready;
     }
