@@ -76,8 +76,8 @@ class SingleNodeTest extends TestBase {
         }
         client = new HttpClient(
                 new ConnectionString(
-                        "http://localhost:" + port +
-                                "?timeout=" + (TIMEOUT.toMillis() / 2)));
+                        "http://localhost:" + port
+                                + "?timeout=" + (TIMEOUT.toMillis() / 2)));
     }
 
     @NotNull
@@ -205,7 +205,7 @@ class SingleNodeTest extends TestBase {
     }
 
     @Test
-    void upsert() {
+    void overwrite() {
         assertTimeoutPreemptively(TIMEOUT, () -> {
             final String key = randomId();
             final byte[] value1 = randomValue();
@@ -277,7 +277,7 @@ class SingleNodeTest extends TestBase {
     }
 
     @Test
-    void delete() {
+    void remove() {
         assertTimeoutPreemptively(TIMEOUT, () -> {
             final String key = randomId();
             final byte[] value = randomValue();

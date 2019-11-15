@@ -42,6 +42,12 @@ public final class Cluster {
         // Not instantiable
     }
 
+    /**
+     * Starts a cluster of 3 nodes.
+     *
+     * @param args unused
+     * @throws IOException in case of any IO error
+     */
     public static void main(final String[] args) throws IOException {
         // Fill the topology
         final Set<String> topology = new HashSet<>(3);
