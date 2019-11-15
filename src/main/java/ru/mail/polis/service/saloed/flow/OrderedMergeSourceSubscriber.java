@@ -43,7 +43,7 @@ final class OrderedMergeSourceSubscriber<T extends Comparable<T>>
     }
 
     @Override
-    public void request(long n) {
+    public void request(final long n) {
         source.request(1);
     }
 

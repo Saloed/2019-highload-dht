@@ -15,7 +15,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
 
     private final Subscriber<? super T> subscriber;
     private final List<OrderedMergeSourceSubscriber<T>> sources;
-    private final ArrayList<SourceValue<T>> values;
+    private final List<SourceValue<T>> values;
     private final AtomicReference<Throwable> error = new AtomicReference<>();
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private final AtomicLong requested = new AtomicLong();
@@ -79,7 +79,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
         int missed = 1;
         long emitted = this.emitted.get();
         do {
-            long requested = this.requested.get();
+            final long requested = this.requested.get();
             while (true) {
                 if (cancelled.get()) {
                     return;
@@ -157,9 +157,8 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     }
 
     private static final class SourceValueStats {
-
-        int done = 0;
-        int ready = 0;
+        int done;
+        int ready;
     }
 
     private static final class SourceValue<T> {

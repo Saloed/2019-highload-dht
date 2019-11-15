@@ -10,8 +10,8 @@ import ru.mail.polis.service.saloed.flow.SingleSubscriberProcessor;
 public class RecordsFromBytesProcessor extends
     SingleSubscriberProcessor<List<ByteBuffer>, RecordWithTimestampAndKey> {
 
+    private final AtomicLong requested = new AtomicLong(0);
     private ByteBuffer lastReceived = ByteBuffer.allocate(0);
-    private AtomicLong requested = new AtomicLong(0);
 
     private ByteBuffer extend(final ByteBuffer buffer, final ByteBuffer other) {
         return ByteBuffer.allocate(buffer.remaining() + other.remaining())
@@ -45,7 +45,7 @@ public class RecordsFromBytesProcessor extends
     }
 
     @Override
-    public void request(long n) {
+    public void request(final long n) {
         final var current = requested.getAndAdd(n);
         if (current == 0L) {
             source.request(1);

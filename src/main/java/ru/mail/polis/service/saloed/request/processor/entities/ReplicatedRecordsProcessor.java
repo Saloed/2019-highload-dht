@@ -13,7 +13,7 @@ public class ReplicatedRecordsProcessor extends
 
 
     @Override
-    public void onNext(RecordWithTimestampAndKey item) {
+    public void onNext(final RecordWithTimestampAndKey item) {
         if (previous == null) {
             previous = item;
             source.request(1);

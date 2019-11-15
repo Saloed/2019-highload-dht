@@ -12,7 +12,7 @@ public final class IteratorPublisher<T> implements Publisher<T>, Subscription {
     private final Iterator<T> iterator;
     private final AtomicLong requested = new AtomicLong(0);
     private final AtomicBoolean canceled = new AtomicBoolean(false);
-    private Subscriber<? super T> subscriber = null;
+    private Subscriber<? super T> subscriber;
 
     public IteratorPublisher(final Iterator<T> iterator) {
         this.iterator = iterator;
@@ -28,13 +28,13 @@ public final class IteratorPublisher<T> implements Publisher<T>, Subscription {
     }
 
     @Override
-    public void request(long n) {
+    public void request(final long n) {
         if (n <= 0L) {
             canceled.set(true);
             subscriber.onError(new IllegalArgumentException("Requested amount is below zero"));
             return;
         }
-        long requested = this.requested.getAndAdd(n);
+        final long requested = this.requested.getAndAdd(n);
         if (requested == 0L) {
             emit(this.requested.get());
         }
@@ -45,7 +45,8 @@ public final class IteratorPublisher<T> implements Publisher<T>, Subscription {
         canceled.set(true);
     }
 
-    private void emit(long currentRequested) {
+    private void emit(final long requestEmit) {
+        long currentRequested = requestEmit;
         int emitted = 0;
         while (true) {
             while (iterator.hasNext() && emitted != currentRequested) {
@@ -62,7 +63,7 @@ public final class IteratorPublisher<T> implements Publisher<T>, Subscription {
                 }
                 return;
             }
-            long freshRequested = requested.get();
+            final long freshRequested = requested.get();
             if (freshRequested == currentRequested) {
                 currentRequested = requested.addAndGet(-currentRequested);
                 if (currentRequested == 0L) {

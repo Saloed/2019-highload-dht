@@ -37,12 +37,12 @@ public abstract class SingleSubscriberProcessor<T, R> implements Processor<T, R>
     }
 
     @Override
-    public void onError(Throwable throwable) {
+    public void onError(final Throwable throwable) {
         subscriber.onError(throwable);
     }
 
     @Override
-    public void request(long n) {
+    public void request(final long n) {
         source.request(n);
     }
 

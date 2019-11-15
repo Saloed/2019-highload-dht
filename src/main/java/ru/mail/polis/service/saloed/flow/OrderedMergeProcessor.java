@@ -23,7 +23,7 @@ public final class OrderedMergeProcessor<T extends Comparable<T>> implements Pub
     }
 
     @Override
-    public void subscribe(Subscriber<? super T> subscriber) {
+    public void subscribe(final Subscriber<? super T> subscriber) {
         final var merger = new OrderedMergeSubscription<T>(subscriber, sources.size());
         subscriber.onSubscribe(merger);
         merger.subscribe(sources);
