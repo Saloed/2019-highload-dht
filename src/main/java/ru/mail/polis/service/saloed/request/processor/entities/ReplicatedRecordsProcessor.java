@@ -1,6 +1,5 @@
 package ru.mail.polis.service.saloed.request.processor.entities;
 
-import java.util.concurrent.Flow.Publisher;
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
 import ru.mail.polis.service.saloed.flow.SingleSubscriberProcessor;

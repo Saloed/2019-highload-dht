@@ -23,7 +23,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     private final AtomicInteger wip = new AtomicInteger();
 
 
-    OrderedMergeSubscription(final Subscriber<? super T> subscriber, int n) {
+    OrderedMergeSubscription(final Subscriber<? super T> subscriber, final int n) {
         this.subscriber = subscriber;
         this.sources = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
@@ -42,7 +42,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     }
 
     @Override
-    public void request(long n) {
+    public void request(final long n) {
         requested.addAndGet(n);
         publish();
     }
@@ -157,6 +157,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     }
 
     private static final class SourceValueStats {
+
         int done = 0;
         int ready = 0;
     }

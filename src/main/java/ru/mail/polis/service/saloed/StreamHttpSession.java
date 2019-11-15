@@ -21,9 +21,8 @@ public final class StreamHttpSession extends HttpSession implements Flow.Subscri
 
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.UTF_8);
     private static final byte[] EMPTY = "0\r\n\r\n".getBytes(StandardCharsets.UTF_8);
-
+    private final Queue<Payload> streamQueue = new ConcurrentLinkedQueue<>();
     private Subscription subscription;
-    private Queue<Payload> streamQueue = new ConcurrentLinkedQueue<>();
 
     StreamHttpSession(final Socket socket, final HttpServer server) {
         super(socket, server);

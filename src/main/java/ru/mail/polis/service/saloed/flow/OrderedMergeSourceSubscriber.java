@@ -19,19 +19,19 @@ final class OrderedMergeSourceSubscriber<T extends Comparable<T>>
     }
 
     @Override
-    public void onSubscribe(Subscription subscription) {
+    public void onSubscribe(final Subscription subscription) {
         source = subscription;
         subscription.request(1);
     }
 
     @Override
-    public void onNext(T item) {
+    public void onNext(final T item) {
         queue.offer(item);
         merger.publish();
     }
 
     @Override
-    public void onError(Throwable throwable) {
+    public void onError(final Throwable throwable) {
         done.set(true);
         merger.onSourceError(throwable);
     }
