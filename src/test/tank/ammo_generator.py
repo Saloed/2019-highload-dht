@@ -1,14 +1,12 @@
 import abc
 import argparse
 import gzip
-import itertools
 import random
-import shutil
 import string
-import uuid
 
 import durations
 import enum
+import numpy as np
 import tqdm
 
 
@@ -53,33 +51,27 @@ parser.add_argument('--mode', type=LoadTestingMode,
                     choices=list(LoadTestingMode), required=True,
                     help=LoadTestingMode.help_message())
 
-_random_body_source = list(string.ascii_uppercase + string.digits)
+
+def generate_random_body_pool():
+    _random_body_source = list(string.ascii_uppercase + string.digits)
+    return [
+        ''.join(
+            random.choice(_random_body_source)
+            for _ in range(random.randint(10, 100))
+        )
+        for _ in range(100)
+    ]
 
 
-def replace_percent(replace_in, replace_to, percent):
-    result = replace_in[:]
-    replace_amount = int(len(result) * percent)
-    for _ in range(replace_amount):
-        replace_idx = random.randint(0, len(result) - 1)
-        to_idx = random.randint(0, len(replace_to) - 1)
-        result[replace_idx] = replace_to[to_idx]
-    return result
+body_pool = generate_random_body_pool()
 
 
 def generate_random_body():
-    return ''.join(
-        random.choice(_random_body_source)
-        for _ in range(random.randint(10, 100))
-    )
+    return random.choice(body_pool)
 
 
-def generate_unique_keys(amount):
-    keys = [
-        str(uuid.uuid1())
-        for _ in tqdm.trange(amount, desc='Generate entities')
-    ]
-    random.shuffle(keys)
-    return keys
+def generate_unique_keys(amount, prefix=''):
+    return np.asarray([prefix + str(i) for i in range(amount)])
 
 
 class AmmoGenerator(object):
@@ -87,48 +79,51 @@ class AmmoGenerator(object):
 
     def __init__(self, requests):
         self.requests_amount = int(requests)
-        self.entities = None
-        self.entities_file_name = None
-
-    def get_filler_data(self):
-        return self.entities, self.entities_file_name
 
     @abc.abstractproperty
     def name(self):
         pass
 
-    def get_headers(self):
-        return ['[Connection: Keep-Alive]\n']
-
     def get_path(self):
         return '/v0/entity'
 
-    def make_requests(self, builder, entities=None):
-        if entities is None:
-            entities = self.entities
+    @abc.abstractmethod
+    def build_request(self, data):
+        pass
+
+    def make_requests(self, entities):
         return (
-            self.make_single_request(builder, entity)
-            for entity in tqdm.tqdm(entities, desc='making requests')
+            self.build_request(entity)
+            for entity in
+            tqdm.tqdm(entities, desc='Generate {} requests'.format(self.name))
         )
 
-    def make_single_request(self, builder, entity):
-        return builder(id=entity)
-
-    def make_uri(self, **kwargs):
+    def make_request_path(self, **kwargs):
         path = self.get_path()
         params = ['{}={}'.format(key, value) for key, value in kwargs.items()]
         if params:
             path += '?' + '&'.join(params)
         return path
 
-    def make_post(self, **kwargs):
-        uri = self.make_uri(**kwargs)
+    def make_put(self, **kwargs):
+        path = self.make_request_path(**kwargs)
         body = generate_random_body()
-        return '{} {}\n{}\n'.format(len(body), uri, body)
+        request = 'PUT {path} HTTP/1.0\n{body}'.format(
+            path=path, body=body
+        )
+        return self.wrap_request(request, tag='put')
 
     def make_get(self, **kwargs):
-        uri = self.make_uri(**kwargs)
-        return uri + '\n'
+        path = self.make_request_path(**kwargs)
+        request = "GET {path} HTTP/1.0\n".format(path=path)
+        return self.wrap_request(request, tag='get')
+
+    @staticmethod
+    def wrap_request(request, tag=''):
+        size = len(request)
+        return '{size} {tag}\n{request}\r\n'.format(
+            size=size, tag=tag, request=request
+        )
 
     @abc.abstractmethod
     def generate(self):
@@ -140,103 +135,116 @@ class AmmoGenerator(object):
             f.writelines(data)
 
     def save(self, requests):
-        data = itertools.chain(self.get_headers(), requests)
-        self.entities_file_name = '{}-ammo.txt.gz'.format(self.name)
-        self.save_gzip(self.entities_file_name, data)
+        file_name = '{}-ammo.txt.gz'.format(self.name)
+        self.save_gzip(file_name, requests)
 
 
 class AmmoGeneratorWithPrefilling(AmmoGenerator):
-    def __init__(self, requests):
-        super(AmmoGeneratorWithPrefilling, self).__init__(requests)
-        self.filler = None
-        self.filler_file = None
-
-    def create_filler(self):
-        return generate_unique_keys(self.requests_amount)
-
-    def get_filler_data(self):
-        return self.filler, self.filler_file
 
     def get_filler(self):
-        if self.filler is None:
-            self.filler = self.create_filler()
-        self.save_filler()
-        return self.filler[:]
+        filler_entities = generate_unique_keys(self.requests_amount)
+        requests = [
+            self.make_put(id=key)
+            for key in
+            tqdm.tqdm(filler_entities, desc='Generate filler for ' + self.name)
+        ]
+        self.save_filler(requests)
+        return filler_entities
 
-    def save_filler(self):
+    def save_filler(self, data):
         file_name = '{}-filler.txt.gz'.format(self.name)
-        if self.filler_file is not None:
-            shutil.copy(self.filler_file, file_name)
-        else:
-            self.save_gzip(file_name, self.filler)
-        self.filler_file = file_name
-
-    def set_filler(self, entities, file_name):
-        self.filler = entities
-        self.filler_file = file_name
+        self.save_gzip(file_name, data)
 
 
 class CreateUniqueGenerator(AmmoGenerator):
     name = LoadTestingMode.create_unique.value
 
+    def build_request(self, data):
+        return self.make_put(id=data)
+
     def generate(self):
-        self.entities = generate_unique_keys(self.requests_amount)
-        requests = self.make_requests(self.make_post)
+        entities = generate_unique_keys(self.requests_amount)
+        requests = self.make_requests(entities)
         self.save(requests)
 
 
-class CreateOverwriteGenerator(AmmoGenerator):
+class CreateOverwriteGenerator(CreateUniqueGenerator):
     name = LoadTestingMode.create_overwrite.value
 
     def generate(self):
         entities = generate_unique_keys(self.requests_amount)
-        self.entities = replace_percent(entities, entities, 0.1)
-        requests = self.make_requests(self.make_post)
+        entities = self.replace_percent(entities, entities, 0.1)
+        requests = self.make_requests(entities)
         self.save(requests)
+
+    @staticmethod
+    def replace_percent(replace_in, replace_to, percent):
+        result = replace_in[:]
+        replace_amount = int(len(result) * percent)
+        for _ in range(replace_amount):
+            replace_idx = random.randint(0, len(result) - 1)
+            to_idx = random.randint(0, len(replace_to) - 1)
+            result[replace_idx] = replace_to[to_idx]
+        return result
 
 
 class GetGenerator(AmmoGeneratorWithPrefilling):
     name = LoadTestingMode.get.value
 
+    def build_request(self, data):
+        return self.make_get(id=data)
+
     def generate(self):
-        self.entities = self.get_filler()
-        random.shuffle(self.entities)
-        requests = self.make_requests(self.make_get)
+        entities = self.get_filler()
+        get_entities = np.random.choice(entities, len(entities))
+        requests = self.make_requests(get_entities)
         self.save(requests)
 
 
-class GetNewGenerator(AmmoGeneratorWithPrefilling):
+class GetNewGenerator(GetGenerator):
     name = LoadTestingMode.get_new.value
 
     def generate(self):
         entities = self.get_filler()
-        newest_entities = entities[-int(len(entities) * 0.1):]
-        self.entities = replace_percent(entities, newest_entities, 0.5)
-        requests = self.make_requests(self.make_get)
+        distribution = np.random.exponential(scale=2, size=self.requests_amount)
+        weight = distribution / np.sum(distribution)
+        weight = weight[::-1]
+        get_entities = np.random.choice(entities, size=self.requests_amount,
+                                        p=weight)
+        requests = self.make_requests(get_entities)
         self.save(requests)
 
 
 class MixedGenerator(AmmoGeneratorWithPrefilling):
     name = LoadTestingMode.mixed.value
 
-    def generate(self):
-        create_entities = generate_unique_keys(self.requests_amount // 2)
-        get_entities = self.get_filler()
-        random.shuffle(get_entities)
-        get_entities = get_entities[:self.requests_amount // 2]
-        create_requests = self.make_requests(self.make_post, create_entities)
-        get_requests = self.make_requests(self.make_get, get_entities)
-        requests = self.random_order(create_requests, get_requests)
-        self.save(requests)
+    GET = 'get'
+    POST = 'post'
+    CHOICES = [GET, POST]
 
-    def random_order(self, *iterables):
-        iterators = [iter(it) for it in iterables]
-        while iterators:
-            iterator = random.choice(iterators)
-            try:
-                yield iterator.next()
-            except StopIteration:
-                iterators.remove(iterator)
+    def build_request(self, data):
+        _type, entity = data
+        if _type == self.GET:
+            return self.make_get(id=entity)
+        else:
+            return self.make_put(id=entity)
+
+    def generate(self):
+        create_entities = generate_unique_keys(self.requests_amount // 2,
+                                               prefix='mixed')
+        get_entities = self.get_filler()
+
+        def sample():
+            _type = np.random.choice(self.CHOICES)
+            if _type == self.GET:
+                entity = np.random.choice(get_entities)
+            else:
+                entity = np.random.choice(create_entities)
+            return _type, entity
+
+        samples = (sample() for _ in range(self.requests_amount))
+        requests = self.make_requests(samples)
+        self.save(requests)
 
 
 def generators_for_mode(mode):
@@ -256,31 +264,8 @@ def generators_for_mode(mode):
 def generate(args):
     generators = generators_for_mode(args.mode)
     requests = args.duration.to_seconds() * args.rps
-    generators = [generator(requests) for generator in generators]
-    if len(generators) == 1:
-        generators[0].generate()
-        return
-
-    need_filler = [
-        gen
-        for gen in generators
-        if isinstance(gen, AmmoGeneratorWithPrefilling)
-    ]
-    filler_provider = [gen
-                       for gen in generators
-                       if isinstance(gen, CreateUniqueGenerator)
-                       ] or need_filler
-
-    if filler_provider:
-        filler_provider = filler_provider[0]
-    generators = [gen for gen in generators if gen is not filler_provider]
-    if filler_provider is not None:
-        filler_provider.generate()
-        for generator in need_filler:
-            filler, filler_file = filler_provider.get_filler_data()
-            generator.set_filler(filler, filler_file)
     for generator in generators:
-        generator.generate()
+        generator(requests).generate()
 
 
 generate(parser.parse_args())
