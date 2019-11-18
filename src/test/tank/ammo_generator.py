@@ -105,17 +105,34 @@ class AmmoGenerator(object):
             path += '?' + '&'.join(params)
         return path
 
+    def get_headers(self):
+        return '\n'.join([
+            'Host: overload.yandex.net'
+        ])
+
     def make_put(self, **kwargs):
+        req_template = (
+            "PUT {path} HTTP/1.1\r\n"
+            "{headers}\r\n"
+            "Content-Length: {body_length}\r\n"
+            "\r\n"
+            "{body}"
+        )
         path = self.make_request_path(**kwargs)
         body = generate_random_body()
-        request = 'PUT {path} HTTP/1.0\n{body}'.format(
-            path=path, body=body
+        headers = self.get_headers()
+        request = req_template.format(
+            path=path, body=body, body_length=len(body), headers=headers
         )
         return self.wrap_request(request, tag='put')
 
     def make_get(self, **kwargs):
+        req_template = (
+            "GET {path} HTTP/1.1\r\n"
+            "{headers}\r\n"
+        )
         path = self.make_request_path(**kwargs)
-        request = "GET {path} HTTP/1.0\n".format(path=path)
+        request = req_template.format(path=path, headers=self.get_headers())
         return self.wrap_request(request, tag='get')
 
     @staticmethod
@@ -135,11 +152,12 @@ class AmmoGenerator(object):
             f.writelines(data)
 
     def save(self, requests):
-        file_name = '{}-ammo.txt.gz'.format(self.name)
+        file_name = '{}-ammo.gz'.format(self.name)
         self.save_gzip(file_name, requests)
 
 
 class AmmoGeneratorWithPrefilling(AmmoGenerator):
+    __metaclass__ = abc.ABCMeta
 
     def get_filler(self):
         filler_entities = generate_unique_keys(self.requests_amount)
@@ -152,7 +170,7 @@ class AmmoGeneratorWithPrefilling(AmmoGenerator):
         return filler_entities
 
     def save_filler(self, data):
-        file_name = '{}-filler.txt.gz'.format(self.name)
+        file_name = '{}-filler.gz'.format(self.name)
         self.save_gzip(file_name, data)
 
 

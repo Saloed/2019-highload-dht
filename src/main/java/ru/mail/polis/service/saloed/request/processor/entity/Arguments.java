@@ -81,7 +81,11 @@ public class Arguments {
         final var isServiceRequest = RequestUtils.isRequestFromService(request);
         final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
         if (request.getMethod() == Request.METHOD_PUT) {
-            final var body = ByteBuffer.wrap(request.getBody());
+            final var requestBody = request.getBody();
+            if(requestBody == null){
+                return null;
+            }
+            final var body = ByteBuffer.wrap(requestBody);
             return new UpsertArguments(key, id, body, isServiceRequest, timestamp, replicasAck,
                 replicasFrom);
         }
