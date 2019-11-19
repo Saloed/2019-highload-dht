@@ -107,7 +107,7 @@ class AmmoGenerator(object):
 
     def get_headers(self):
         return '\n'.join([
-            'Host: overload.yandex.net'
+            'User-Agent: yandex-tank'
         ])
 
     def make_put(self, **kwargs):
@@ -129,7 +129,7 @@ class AmmoGenerator(object):
     def make_get(self, **kwargs):
         req_template = (
             "GET {path} HTTP/1.1\r\n"
-            "{headers}\r\n"
+            "{headers}\r\n\r\n"
         )
         path = self.make_request_path(**kwargs)
         request = req_template.format(path=path, headers=self.get_headers())
@@ -161,11 +161,11 @@ class AmmoGeneratorWithPrefilling(AmmoGenerator):
 
     def get_filler(self):
         filler_entities = generate_unique_keys(self.requests_amount)
-        requests = [
+        requests = (
             self.make_put(id=key)
             for key in
             tqdm.tqdm(filler_entities, desc='Generate filler for ' + self.name)
-        ]
+        )
         self.save_filler(requests)
         return filler_entities
 

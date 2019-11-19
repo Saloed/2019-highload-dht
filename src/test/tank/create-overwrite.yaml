@@ -13,8 +13,8 @@ telegraf:
   enabled: false
 overload:
   enabled: true
-  job_name: Create unique
-  job_dsc: Create entities with unique keys
+  job_name: Create overwirite
+  job_dsc: Create entities with duplicated keys (10% duplication rate)
   token_file: token.txt
   api_attempts: 5 # fix issue with Api error
   api_timeout: 5

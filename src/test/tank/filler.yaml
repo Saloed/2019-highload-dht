@@ -1,0 +1,13 @@
+phantom:
+  address: 192.168.1.73:8080
+  load_profile:
+    load_type: rps
+    schedule: const(1000, 1m) const(8000, 6m)
+autostop:
+  autostop:
+    - http(5xx,25%,10s)
+    - time(1s,10s)
+console:
+  enabled: true
+telegraf:
+  enabled: false

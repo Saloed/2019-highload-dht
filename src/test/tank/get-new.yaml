@@ -13,8 +13,8 @@ telegraf:
   enabled: false
 overload:
   enabled: true
-  job_name: Create unique
-  job_dsc: Create entities with unique keys
+  job_name: Get new 
+  job_dsc: Get entities exponentially (from newest to oldest)
   token_file: token.txt
   api_attempts: 5 # fix issue with Api error
   api_timeout: 5

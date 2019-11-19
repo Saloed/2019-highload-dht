@@ -3,6 +3,7 @@ phantom:
   load_profile:
     load_type: rps
     schedule: line(1, 8000, 2m) const(8000, 3m)
+  writelog: all
 autostop:
   autostop:
     - http(5xx,25%,10s)
@@ -13,8 +14,8 @@ telegraf:
   enabled: false
 overload:
   enabled: true
-  job_name: Create unique
-  job_dsc: Create entities with unique keys
+  job_name: Mixed
+  job_dsc: Mixed get/put requests (50/50)
   token_file: token.txt
   api_attempts: 5 # fix issue with Api error
   api_timeout: 5
