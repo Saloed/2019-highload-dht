@@ -20,7 +20,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private final AtomicLong requested = new AtomicLong();
     private final AtomicLong emitted = new AtomicLong();
-    private final AtomicInteger wip = new AtomicInteger();
+    private final AtomicInteger publishRequests = new AtomicInteger();
 
 
     OrderedMergeSubscription(final Subscriber<? super T> subscriber, final int n) {
@@ -53,7 +53,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
             for (final var source : sources) {
                 source.cancel();
             }
-            wip.getAndIncrement();
+            publishRequests.getAndIncrement();
         }
     }
 
@@ -101,10 +101,10 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     }
 
     void publish() {
-        if (wip.getAndIncrement() != 0) {
+        if (publishRequests.getAndIncrement() != 0) {
             return;
         }
-        int missed = 1;
+        int missedPublishRequests = 1;
         long currentEmitted = this.emitted.get();
         do {
             currentEmitted = emit(currentEmitted);
@@ -112,8 +112,8 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
                 return;
             }
             this.emitted.set(currentEmitted);
-            missed = wip.addAndGet(-missed);
-        } while (missed != 0);
+            missedPublishRequests = publishRequests.addAndGet(-missedPublishRequests);
+        } while (missedPublishRequests != 0);
     }
 
     private SourceValueStats actualizeValues() {

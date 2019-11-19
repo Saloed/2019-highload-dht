@@ -3,6 +3,7 @@ package ru.mail.polis.service.saloed.request.processor;
 import com.google.common.collect.Iterators;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodySubscribers;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.Flow.Publisher;
@@ -23,6 +24,7 @@ import ru.mail.polis.service.saloed.request.processor.entities.ReplicatedRecords
 public final class EntitiesRequestProcessor {
 
     public static final String REQUEST_PATH = "/v0/entities";
+    private static final Duration TIMEOUT = Duration.ofSeconds(2);
     private final ClusterNodeRouter clusterNodeRouter;
     private final DAOWithTimestamp dao;
 
@@ -70,7 +72,9 @@ public final class EntitiesRequestProcessor {
                 continue;
             }
             final var client = node.getHttpClient();
-            var requestBuilder = node.requestBuilder(REQUEST_PATH, requestParams);
+            var requestBuilder = node
+                .requestBuilder(REQUEST_PATH, requestParams)
+                .timeout(TIMEOUT);
             requestBuilder = RequestUtils.setRequestFromService(requestBuilder);
             final var request = requestBuilder.GET().build();
             final var recordProcessor = new RecordsFromBytesProcessor();
