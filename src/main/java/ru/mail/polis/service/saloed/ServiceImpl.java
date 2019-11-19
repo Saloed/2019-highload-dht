@@ -1,12 +1,18 @@
 package ru.mail.polis.service.saloed;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.MoreExecutors;
 import java.io.IOException;
+import java.net.http.HttpClient;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import one.nio.http.HttpServer;
 import one.nio.http.HttpServerConfig;
 import one.nio.http.HttpSession;
@@ -36,6 +42,8 @@ public final class ServiceImpl extends HttpServer implements Service {
     private final DAOWithTimestamp dao;
     private final ClusterNodeRouter clusterNodeRouter;
     private final ServiceMetrics metrics;
+    private final HttpClient httpClient;
+    private final ExecutorService httpClientWorkers;
 
     private ServiceImpl(final HttpServerConfig config, @NotNull final DAOWithTimestamp dao,
         @NotNull final ClusterNodeRouter clusterNodeRouter)
@@ -43,11 +51,16 @@ public final class ServiceImpl extends HttpServer implements Service {
         super(config);
         this.dao = dao;
         this.clusterNodeRouter = clusterNodeRouter;
-        this.metrics = new ServiceMetrics(clusterNodeRouter, this);
+        this.metrics = new ServiceMetrics(this);
         final var myWorkers = (ThreadPoolExecutor) workers;
         final var currentHandler = myWorkers.getRejectedExecutionHandler();
         final var rejectedRequestsHandler = new RejectedRequestHandler(currentHandler);
         myWorkers.setRejectedExecutionHandler(rejectedRequestsHandler);
+        httpClientWorkers = Executors.newWorkStealingPool(clusterNodeRouter.getNodesAmount());
+        httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofMillis(100))
+            .executor(httpClientWorkers)
+            .build();
     }
 
     /**
@@ -153,7 +166,7 @@ public final class ServiceImpl extends HttpServer implements Service {
             final var requestBuilder = node
                 .requestBuilder(EntityRequestProcessor.REQUEST_PATH, requestParams);
             final var request = processor.preprocessRemote(requestBuilder).build();
-            final var response = node.getHttpClient()
+            final var response = httpClient
                 .sendAsync(request, processor::obtainRemoteResult)
                 .thenApply(HttpResponse::body)
                 .exceptionally(ex -> Optional.empty());
@@ -201,7 +214,8 @@ public final class ServiceImpl extends HttpServer implements Service {
         }
         final var streamSession = (StreamHttpSession) session;
         final var handler = new RequestHandler(metrics, session, () -> {
-            final var processor = new EntitiesRequestProcessor(clusterNodeRouter, dao);
+            final var nodes = clusterNodeRouter.allNodes();
+            final var processor = new EntitiesRequestProcessor(nodes, httpClient, dao);
             metrics.request(arguments.isServiceRequest());
             if (arguments.isServiceRequest()) {
                 processor.processForService(arguments, streamSession);
@@ -214,8 +228,8 @@ public final class ServiceImpl extends HttpServer implements Service {
 
     @Override
     public synchronized void stop() {
-        clusterNodeRouter.close();
         metrics.close();
+        MoreExecutors.shutdownAndAwaitTermination(httpClientWorkers, 100, TimeUnit.MILLISECONDS);
         super.stop();
     }
 

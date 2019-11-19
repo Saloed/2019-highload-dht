@@ -28,11 +28,9 @@ public final class ServiceMetrics implements Closeable {
     private final AtomicInteger errorServiceResponse = new AtomicInteger(0);
     private final Map<Integer, AtomicInteger> responseStatuses = new ConcurrentHashMap<>(10);
     private final Timer timer;
-    private final ClusterNodeRouter nodeRouter;
     private final ServiceImpl server;
 
-    ServiceMetrics(final ClusterNodeRouter nodeRouter, final ServiceImpl server) {
-        this.nodeRouter = nodeRouter;
+    ServiceMetrics(final ServiceImpl server) {
         this.server = server;
         timer = new Timer();
         initializeInfoLoop(timer);
@@ -113,13 +111,6 @@ public final class ServiceMetrics implements Closeable {
         return String.format(FORMAT, "", total.get(), user.get(), service.get());
     }
 
-    private String nodeRouterStats() {
-        final var workers = nodeRouter.getWorkers();
-        return "Node router workers: "
-            + workers.toString()
-            + '\n';
-    }
-
     private String serverStats() {
         return "Server: "
             + "Processed "
@@ -141,7 +132,6 @@ public final class ServiceMetrics implements Closeable {
             + makeData(errorResponse, errorUserResponse, errorServiceResponse)
             + responseStatuses.toString()
             + '\n'
-            + nodeRouterStats()
             + serverStats()
             + '\n';
     }

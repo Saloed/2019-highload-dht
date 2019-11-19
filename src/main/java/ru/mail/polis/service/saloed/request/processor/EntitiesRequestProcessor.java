@@ -1,16 +1,19 @@
 package ru.mail.polis.service.saloed.request.processor;
 
 import com.google.common.collect.Iterators;
+import java.net.http.HttpClient;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodySubscribers;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Flow.Publisher;
 import java.util.concurrent.Flow.Subscriber;
 import ru.mail.polis.dao.timestamp.DAOWithTimestamp;
 import ru.mail.polis.dao.timestamp.RecordWithTimestampAndKey;
 import ru.mail.polis.service.saloed.ClusterNodeRouter;
+import ru.mail.polis.service.saloed.ClusterNodeRouter.ClusterNode;
 import ru.mail.polis.service.saloed.IOExceptionLight;
 import ru.mail.polis.service.saloed.flow.IteratorPublisher;
 import ru.mail.polis.service.saloed.flow.OrderedMergeProcessor;
@@ -25,12 +28,16 @@ public final class EntitiesRequestProcessor {
 
     public static final String REQUEST_PATH = "/v0/entities";
     private static final Duration TIMEOUT = Duration.ofSeconds(2);
-    private final ClusterNodeRouter clusterNodeRouter;
+    private final List<ClusterNode> nodes;
+    private final HttpClient client;
     private final DAOWithTimestamp dao;
 
-    public EntitiesRequestProcessor(final ClusterNodeRouter clusterNodeRouter,
+    public EntitiesRequestProcessor(
+        final List<ClusterNodeRouter.ClusterNode> nodes,
+        final HttpClient client,
         final DAOWithTimestamp dao) {
-        this.clusterNodeRouter = clusterNodeRouter;
+        this.nodes = nodes;
+        this.client = client;
         this.dao = dao;
     }
 
@@ -57,7 +64,6 @@ public final class EntitiesRequestProcessor {
      */
     public void processForUser(final Arguments arguments,
         final Subscriber<Payload> subscriber) {
-        final var nodes = clusterNodeRouter.allNodes();
         final Map<String, String> requestParams;
         if (arguments.hasEnd()) {
             requestParams = Map.of(
@@ -71,7 +77,6 @@ public final class EntitiesRequestProcessor {
             if (node.isLocal()) {
                 continue;
             }
-            final var client = node.getHttpClient();
             var requestBuilder = node
                 .requestBuilder(REQUEST_PATH, requestParams)
                 .timeout(TIMEOUT);

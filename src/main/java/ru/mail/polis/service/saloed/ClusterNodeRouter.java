@@ -1,9 +1,6 @@
 package ru.mail.polis.service.saloed;
 
-import com.google.common.util.concurrent.MoreExecutors;
-import java.io.Closeable;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -11,23 +8,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.service.saloed.topology.ConsistentHashTopology;
 import ru.mail.polis.service.saloed.topology.Topology;
 
-public final class ClusterNodeRouter implements Closeable {
+public final class ClusterNodeRouter {
 
     private static final int TIMEOUT = 100;
-    private final ExecutorService workersPool;
     private final Topology<ClusterNode> topology;
 
-    private ClusterNodeRouter(final Topology<ClusterNode> topology,
-        final ForkJoinPool workersPool) {
-        this.workersPool = workersPool;
+    private ClusterNodeRouter(final Topology<ClusterNode> topology) {
         this.topology = topology;
     }
 
@@ -44,28 +35,15 @@ public final class ClusterNodeRouter implements Closeable {
         if (!topology.contains(me)) {
             throw new IllegalArgumentException("Me is not part of topology");
         }
-        final var workersPool = new ForkJoinPool(
-            topology.size(),
-            ForkJoinPool.defaultForkJoinWorkerThreadFactory,
-            null,
-            true);
-        final var client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(TIMEOUT))
-            .executor(workersPool)
-            .build();
         final var nodes = topology.stream()
             .sorted()
             .map(node -> {
                 final var type = node.equals(me) ? ClusterNodeType.LOCAL : ClusterNodeType.REMOTE;
-                return new ClusterNode(type, client, node);
+                return new ClusterNode(type, node);
             })
             .collect(Collectors.toList());
         final var clusterTopology = ConsistentHashTopology.forNodes(nodes);
-        return new ClusterNodeRouter(clusterTopology, workersPool);
-    }
-
-    ExecutorService getWorkers() {
-        return workersPool;
+        return new ClusterNodeRouter(clusterTopology);
     }
 
     /**
@@ -97,11 +75,6 @@ public final class ClusterNodeRouter implements Closeable {
         return topology.selectNode(key, replicas);
     }
 
-    @Override
-    public void close() {
-        MoreExecutors.shutdownAndAwaitTermination(workersPool, TIMEOUT, TimeUnit.MILLISECONDS);
-    }
-
     private enum ClusterNodeType {
         LOCAL, REMOTE
     }
@@ -109,13 +82,10 @@ public final class ClusterNodeRouter implements Closeable {
     public static final class ClusterNode implements Comparable<ClusterNode> {
 
         private final ClusterNodeType type;
-        private final HttpClient httpClient;
         private final String endpoint;
 
-        ClusterNode(final ClusterNodeType type, final HttpClient httpClient,
-            final String endpoint) {
+        ClusterNode(final ClusterNodeType type, final String endpoint) {
             this.type = type;
-            this.httpClient = httpClient;
             this.endpoint = endpoint;
         }
 
@@ -126,15 +96,6 @@ public final class ClusterNodeRouter implements Closeable {
          */
         public boolean isLocal() {
             return type == ClusterNodeType.LOCAL;
-        }
-
-        /**
-         * Get http client for node. Returns null for local node.
-         *
-         * @return http client
-         */
-        public HttpClient getHttpClient() {
-            return httpClient;
         }
 
         /**
