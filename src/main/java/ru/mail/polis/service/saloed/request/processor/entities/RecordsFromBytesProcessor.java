@@ -35,12 +35,12 @@ public class RecordsFromBytesProcessor extends
             while (RecordWithTimestampAndKey.mayDeserialize(lastReceived)) {
                 final var record = RecordWithTimestampAndKey.fromRawBytes(lastReceived);
                 requested.getAndDecrement();
-                subscriber.onNext(record);
+                onNextResult(record);
             }
             lastReceived = truncate(lastReceived);
         }
         if (requested.get() > 0) {
-            source.request(1);
+            super.request(1);
         }
     }
 
@@ -48,7 +48,7 @@ public class RecordsFromBytesProcessor extends
     public void request(final long n) {
         final var current = requested.getAndAdd(n);
         if (current == 0L) {
-            source.request(1);
+            super.request(1);
         }
     }
 }

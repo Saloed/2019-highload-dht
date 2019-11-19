@@ -100,7 +100,7 @@ public final class StreamHttpSession extends HttpSession implements Flow.Subscri
 
     private void handleUnexpectedStreamEnding() {
         subscription.cancel();
-        close();
+        handleSocketClosed();
     }
 
     private void next() throws IOException {

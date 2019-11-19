@@ -7,8 +7,8 @@ import java.util.concurrent.Flow.Subscription;
 
 public abstract class SingleSubscriberProcessor<T, R> implements Processor<T, R>, Subscription {
 
-    protected Subscriber<? super R> subscriber;
-    protected Flow.Subscription source;
+    private Subscriber<? super R> subscriber;
+    private Flow.Subscription source;
 
     @Override
     public void onSubscribe(final Flow.Subscription subscription) {
@@ -29,6 +29,10 @@ public abstract class SingleSubscriberProcessor<T, R> implements Processor<T, R>
         if (this.source != null && this.subscriber != null) {
             this.subscriber.onSubscribe(this);
         }
+    }
+
+    public void onNextResult(final R item) {
+        subscriber.onNext(item);
     }
 
     @Override

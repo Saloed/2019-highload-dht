@@ -16,12 +16,12 @@ public class ReplicatedRecordsProcessor extends
     public void onNext(final RecordWithTimestampAndKey item) {
         if (previous == null) {
             previous = item;
-            source.request(1);
+            request(1);
             return;
         }
         if (previous.sameKeyRecords(item) || previous.isEmpty()) {
             previous = item;
-            source.request(1);
+            request(1);
             return;
         }
         final var record = previous;
@@ -32,7 +32,7 @@ public class ReplicatedRecordsProcessor extends
     private void pushNext(final RecordWithTimestampAndKey next) {
         final var record = Record.of(next.getKey(), next.getValue());
         final var payload = new RecordPayload(record);
-        subscriber.onNext(payload);
+        onNextResult(payload);
     }
 
     @Override
