@@ -16,6 +16,7 @@ class LoadTestingMode(enum.Enum):
     get = 'get'
     get_new = 'get-new'
     mixed = 'mixed'
+    range = 'range'
     all = 'all'
 
     def __str__(self):
@@ -29,6 +30,7 @@ class LoadTestingMode(enum.Enum):
 {get}               Get entities uniformly. Also produce ammo to fulfill storage   
 {get_new}           Get mostly newest entities. Also produce ammo to fulfill storage
 {mixed}             Mixed get and create entities. Also produce ammo to fulfill storage
+{range}             Range requests (1000 entities in a single range)
 {all}               Generate all ammo   
         """.format(
             create_unique=LoadTestingMode.create_unique.value,
@@ -36,6 +38,7 @@ class LoadTestingMode(enum.Enum):
             get=LoadTestingMode.get.value,
             get_new=LoadTestingMode.get_new.value,
             mixed=LoadTestingMode.mixed.value,
+            range=LoadTestingMode.range.value,
             all=LoadTestingMode.all.value
         )
 
@@ -70,8 +73,11 @@ def generate_random_body():
     return random.choice(body_pool)
 
 
-def generate_unique_keys(amount, prefix=''):
-    return np.asarray([prefix + str(i) for i in range(amount)])
+def generate_unique_keys(amount, template=''):
+    return np.asarray([
+        template.format(i) if template else str(i)
+        for i in range(amount)
+    ])
 
 
 class AmmoGenerator(object):
@@ -83,6 +89,9 @@ class AmmoGenerator(object):
     @abc.abstractproperty
     def name(self):
         pass
+
+    def get_data(self):
+        return generate_unique_keys(self.requests_amount)
 
     def get_path(self):
         return '/v0/entity'
@@ -98,8 +107,9 @@ class AmmoGenerator(object):
             tqdm.tqdm(entities, desc='Generate {} requests'.format(self.name))
         )
 
-    def make_request_path(self, **kwargs):
-        path = self.get_path()
+    def make_request_path(self, path=None, **kwargs):
+        if path is None:
+            path = self.get_path()
         params = ['{}={}'.format(key, value) for key, value in kwargs.items()]
         if params:
             path += '?' + '&'.join(params)
@@ -110,7 +120,7 @@ class AmmoGenerator(object):
             'User-Agent: yandex-tank'
         ])
 
-    def make_put(self, **kwargs):
+    def make_put(self, path=None, **kwargs):
         req_template = (
             "PUT {path} HTTP/1.1\r\n"
             "{headers}\r\n"
@@ -118,20 +128,20 @@ class AmmoGenerator(object):
             "\r\n"
             "{body}"
         )
-        path = self.make_request_path(**kwargs)
+        request_path = self.make_request_path(path, **kwargs)
         body = generate_random_body()
         headers = self.get_headers()
         request = req_template.format(
-            path=path, body=body, body_length=len(body), headers=headers
+            path=request_path, body=body, body_length=len(body), headers=headers
         )
         return self.wrap_request(request, tag='put')
 
-    def make_get(self, **kwargs):
+    def make_get(self, path=None, **kwargs):
         req_template = (
             "GET {path} HTTP/1.1\r\n"
             "{headers}\r\n\r\n"
         )
-        path = self.make_request_path(**kwargs)
+        path = self.make_request_path(path, **kwargs)
         request = req_template.format(path=path, headers=self.get_headers())
         return self.wrap_request(request, tag='get')
 
@@ -159,10 +169,13 @@ class AmmoGenerator(object):
 class AmmoGeneratorWithPrefilling(AmmoGenerator):
     __metaclass__ = abc.ABCMeta
 
+    def get_filler_data(self):
+        return generate_unique_keys(self.requests_amount)
+
     def get_filler(self):
-        filler_entities = generate_unique_keys(self.requests_amount)
+        filler_entities = self.get_filler_data()
         requests = (
-            self.make_put(id=key)
+            self.make_put(path='/v0/entity', id=key)
             for key in
             tqdm.tqdm(filler_entities, desc='Generate filler for ' + self.name)
         )
@@ -181,7 +194,7 @@ class CreateUniqueGenerator(AmmoGenerator):
         return self.make_put(id=data)
 
     def generate(self):
-        entities = generate_unique_keys(self.requests_amount)
+        entities = self.get_data()
         requests = self.make_requests(entities)
         self.save(requests)
 
@@ -190,7 +203,7 @@ class CreateOverwriteGenerator(CreateUniqueGenerator):
     name = LoadTestingMode.create_overwrite.value
 
     def generate(self):
-        entities = generate_unique_keys(self.requests_amount)
+        entities = self.get_data()
         entities = self.replace_percent(entities, entities, 0.1)
         requests = self.make_requests(entities)
         self.save(requests)
@@ -249,7 +262,7 @@ class MixedGenerator(AmmoGeneratorWithPrefilling):
 
     def generate(self):
         create_entities = generate_unique_keys(self.requests_amount // 2,
-                                               prefix='mixed')
+                                               template='mixed_{}')
         get_entities = self.get_filler()
 
         def sample():
@@ -265,6 +278,35 @@ class MixedGenerator(AmmoGeneratorWithPrefilling):
         self.save(requests)
 
 
+class RangeGenerator(AmmoGeneratorWithPrefilling):
+    name = LoadTestingMode.range.value
+    RANGE_SIZE = 1000
+
+    def get_path(self):
+        return '/v0/entities'
+
+    def get_filler_data(self):
+        return generate_unique_keys(self.requests_amount,
+                                    template='entity_{:010d}')
+
+    def build_request(self, data):
+        start, end = data
+        return self.make_get(start=start, end=end)
+
+    def generate(self):
+        entities = self.get_filler()
+
+        def get_range(start):
+            end = start + self.RANGE_SIZE
+            start_idx, end_idx = np.clip([start, end], 0, len(entities) - 1)
+            return entities[start_idx], entities[end_idx]
+
+        ranges = [get_range(i) for i in range(self.requests_amount)]
+        random.shuffle(ranges)
+        requests = self.make_requests(ranges)
+        self.save(requests)
+
+
 def generators_for_mode(mode):
     generator_for_mode = {
         LoadTestingMode.create_unique: CreateUniqueGenerator,
@@ -272,6 +314,7 @@ def generators_for_mode(mode):
         LoadTestingMode.get: GetGenerator,
         LoadTestingMode.get_new: GetNewGenerator,
         LoadTestingMode.mixed: MixedGenerator,
+        LoadTestingMode.range: RangeGenerator,
     }
     if mode == LoadTestingMode.all:
         return list(generator_for_mode.values())
