@@ -32,6 +32,13 @@ public final class EntitiesRequestProcessor {
     private final HttpClient client;
     private final DAOWithTimestamp dao;
 
+    /**
+     * Creates a processor for entities request.
+     *
+     * @param nodes  to acquire entities from
+     * @param client to communicate with nodes
+     * @param dao    to retrieve entities from local node
+     */
     public EntitiesRequestProcessor(
         final List<ClusterNodeRouter.ClusterNode> nodes,
         final HttpClient client,

@@ -47,11 +47,18 @@ public abstract class SingleSubscriberProcessor<T, R> implements Processor<T, R>
 
     @Override
     public void request(final long n) {
+        if (source == null) {
+            return;
+        }
         source.request(n);
     }
 
     @Override
     public void cancel() {
+        if (source == null) {
+            return;
+        }
         source.cancel();
+        source = null;
     }
 }

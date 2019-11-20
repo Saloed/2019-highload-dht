@@ -12,6 +12,13 @@ public final class OrderedMergeProcessor<T extends Comparable<T>> implements Pub
         this.sources = sources;
     }
 
+    /**
+     * Merge given publishers in ascending order according to comparator.
+     *
+     * @param sources publishers
+     * @param <T>     comparable type
+     * @return single publisher
+     */
     public static <T extends Comparable<T>> Publisher<T> merge(final List<Publisher<T>> sources) {
         if (sources.isEmpty()) {
             throw new IllegalArgumentException("Nothing to merge");

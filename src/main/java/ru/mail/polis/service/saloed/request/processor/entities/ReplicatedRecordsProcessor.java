@@ -11,7 +11,6 @@ public class ReplicatedRecordsProcessor extends
 
     private RecordWithTimestampAndKey previous;
 
-
     @Override
     public void onNext(final RecordWithTimestampAndKey item) {
         if (previous == null) {

@@ -82,7 +82,7 @@ public class Arguments {
         final var key = ByteBuffer.wrap(id.getBytes(StandardCharsets.UTF_8));
         if (request.getMethod() == Request.METHOD_PUT) {
             final var requestBody = request.getBody();
-            if(requestBody == null){
+            if (requestBody == null) {
                 return null;
             }
             final var body = ByteBuffer.wrap(requestBody);

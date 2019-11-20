@@ -31,7 +31,6 @@ public final class RequestUtils {
         return request.header(SERVICE_REQUEST_HEADER, Boolean.toString(true));
     }
 
-
     /**
      * Check request header, which identifies request from service.
      *

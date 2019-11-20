@@ -3,6 +3,8 @@ package ru.mail.polis.service.saloed.flow;
 import com.google.common.collect.Streams;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Flow.Publisher;
 import java.util.concurrent.Flow.Subscriber;
 import java.util.concurrent.Flow.Subscription;
@@ -14,7 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscription {
 
     private final Subscriber<? super T> subscriber;
-    private final List<OrderedMergeSourceSubscriber<T>> sources;
+    private final List<OrderedMergeSourceSubscriber> sources;
     private final List<SourceValue<T>> values;
     private final AtomicReference<Throwable> error = new AtomicReference<>();
     private final AtomicBoolean cancelled = new AtomicBoolean();
@@ -22,13 +24,11 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
     private final AtomicLong emitted = new AtomicLong();
     private final AtomicInteger publishRequests = new AtomicInteger();
 
-
     OrderedMergeSubscription(final Subscriber<? super T> subscriber, final int n) {
         this.subscriber = subscriber;
         this.sources = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            final var source = new OrderedMergeSourceSubscriber<>(this);
-            this.sources.add(source);
+            this.sources.add(new OrderedMergeSourceSubscriber());
         }
         this.values = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
@@ -53,11 +53,22 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
             for (final var source : sources) {
                 source.cancel();
             }
-            publishRequests.getAndIncrement();
+            if (publishRequests.getAndIncrement() == 0) {
+                cleanup();
+            }
         }
     }
 
-    void onSourceError(final Throwable ex) {
+    private void cleanup() {
+        values.clear();
+        for (final var source : sources) {
+            source.cancel();
+            source.clear();
+        }
+        sources.clear();
+    }
+
+    private void onSourceError(final Throwable ex) {
         error.set(ex);
         publish();
     }
@@ -80,6 +91,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
             }
             if (error.get() != null) {
                 subscriber.onError(error.get());
+                return -1;
             }
             final var valuesStats = actualizeValues();
             if (valuesStats.done == sources.size()) {
@@ -92,6 +104,9 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
             final var minIndex = indexOfMinimal();
             final var min = values.get(minIndex).value;
             values.set(minIndex, SourceValue.empty());
+            if (subscriber == null) {
+                throw new IllegalStateException("Subscriber is not exists");
+            }
             subscriber.onNext(min);
 
             currentEmitted++;
@@ -100,7 +115,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
         return currentEmitted;
     }
 
-    void publish() {
+    private void publish() {
         if (publishRequests.getAndIncrement() != 0) {
             return;
         }
@@ -109,6 +124,7 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
         do {
             currentEmitted = emit(currentEmitted);
             if (currentEmitted == -1) {
+                cleanup();
                 return;
             }
             this.emitted.set(currentEmitted);
@@ -207,4 +223,65 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
         }
     }
 
+    private final class OrderedMergeSourceSubscriber implements Subscriber<T>, Subscription {
+
+        final AtomicBoolean done = new AtomicBoolean(false);
+        private final Queue<T> queue = new ConcurrentLinkedQueue<>();
+        private Subscription source;
+
+        @Override
+        public void onSubscribe(final Subscription subscription) {
+            if (done.get()) {
+                subscription.cancel();
+                return;
+            }
+            source = subscription;
+            subscription.request(1);
+        }
+
+        @Override
+        public void onNext(final T item) {
+            queue.offer(item);
+            publish();
+        }
+
+        @Override
+        public void onError(final Throwable throwable) {
+            done.set(true);
+            onSourceError(throwable);
+        }
+
+        @Override
+        public void onComplete() {
+            done.set(true);
+            publish();
+        }
+
+        @Override
+        public void request(final long n) {
+            if (source == null) {
+                return;
+            }
+            source.request(1);
+        }
+
+        @Override
+        public void cancel() {
+            done.set(true);
+            if (source == null) {
+                return;
+            }
+            source.cancel();
+            source = null;
+        }
+
+        void clear() {
+            queue.clear();
+        }
+
+        T poll() {
+            return queue.poll();
+        }
+
+    }
 }

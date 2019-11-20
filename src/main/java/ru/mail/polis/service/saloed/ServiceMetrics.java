@@ -83,6 +83,14 @@ public final class ServiceMetrics implements Closeable {
         errorResponse.incrementAndGet();
     }
 
+    public void errorResponse(final boolean isServiceRequest) {
+        if (isServiceRequest) {
+            errorServiceResponse();
+        } else {
+            errorUserResponse();
+        }
+    }
+
     void errorUserResponse() {
         errorResponse.incrementAndGet();
         errorUserResponse.incrementAndGet();
@@ -170,6 +178,7 @@ public final class ServiceMetrics implements Closeable {
         @Override
         public void run() {
             log.info(metrics.getInfoString());
+            metrics.reset();
         }
     }
 

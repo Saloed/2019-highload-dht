@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Flow;
 import java.util.concurrent.Flow.Subscription;
@@ -11,21 +12,65 @@ import one.nio.http.HttpServer;
 import one.nio.http.HttpSession;
 import one.nio.http.Response;
 import one.nio.net.Socket;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import ru.mail.polis.service.saloed.payload.Payload;
 
 public final class StreamHttpSession extends HttpSession implements Flow.Subscriber<Payload> {
-
-    private static final Log log = LogFactory.getLog(StreamHttpSession.class);
 
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.UTF_8);
     private static final byte[] EMPTY = "0\r\n\r\n".getBytes(StandardCharsets.UTF_8);
     private final Queue<Payload> streamQueue = new ConcurrentLinkedQueue<>();
     private Subscription subscription;
+    private CompletableFuture<Void> streamCompletionHandler;
 
     StreamHttpSession(final Socket socket, final HttpServer server) {
         super(socket, server);
+    }
+
+    /**
+     * Return future, which completes after stream finished or errored.
+     *
+     * @return future
+     */
+    public CompletableFuture<Void> whenStreamComplete() {
+        if (streamCompletionHandler == null) {
+            streamCompletionHandler = new CompletableFuture<>();
+        }
+        return streamCompletionHandler;
+    }
+
+    @Override
+    public void onSubscribe(final Subscription subscription) {
+        this.subscription = subscription;
+        try {
+            handleStreamStart();
+            subscription.request(1);
+        } catch (IOException ex) {
+            handleUnexpectedStreamEnding(ex);
+        }
+    }
+
+    @Override
+    public void onNext(final Payload item) {
+        streamQueue.add(item);
+        try {
+            next();
+        } catch (IOException ex) {
+            handleUnexpectedStreamEnding(ex);
+        }
+    }
+
+    @Override
+    public void onError(final Throwable throwable) {
+        handleUnexpectedStreamEnding(throwable);
+    }
+
+    @Override
+    public void onComplete() {
+        try {
+            handleStreamEnding();
+        } catch (IOException ex) {
+            handleUnexpectedStreamEnding(ex);
+        }
     }
 
     @Override
@@ -62,6 +107,8 @@ public final class StreamHttpSession extends HttpSession implements Flow.Subscri
         write(EMPTY, 0, EMPTY.length);
         server.incRequestsProcessed();
 
+        completionHandler(true, null);
+
         if (!keepAlive()) {
             scheduleClose();
         }
@@ -85,59 +132,38 @@ public final class StreamHttpSession extends HttpSession implements Flow.Subscri
         writeResponse(response, false);
     }
 
-    @Override
-    public void onSubscribe(final Subscription subscription) {
-        this.subscription = subscription;
-        try {
-            handleStreamStart();
-        } catch (IOException ex) {
-            log.error("Unable to start stream", ex);
-            handleUnexpectedStreamEnding();
+    private void completionHandler(final boolean success, final Throwable ex) {
+        if (streamCompletionHandler == null) {
             return;
         }
-        subscription.request(1);
+        if (success) {
+            streamCompletionHandler.complete(null);
+        } else {
+            streamCompletionHandler.completeExceptionally(ex);
+        }
+        streamCompletionHandler = null;
     }
 
-    private void handleUnexpectedStreamEnding() {
+    private void handleUnexpectedStreamEnding(final Throwable ex) {
         subscription.cancel();
-        handleSocketClosed();
+        subscription = null;
+        close();
+        streamQueue.clear();
+        completionHandler(false, ex);
     }
 
     private void next() throws IOException {
-        while (!streamQueue.isEmpty() && queueHead == null) {
+        while (true) {
+            if (queueHead != null) {
+                break;
+            }
             final var record = streamQueue.poll();
+            if (record == null) {
+                subscription.request(1);
+                break;
+            }
             writeRecord(record);
         }
-        if (streamQueue.isEmpty()) {
-            subscription.request(1);
-        }
     }
 
-
-    @Override
-    public void onNext(final Payload item) {
-        streamQueue.add(item);
-        try {
-            next();
-        } catch (IOException ex) {
-            log.error("Unable to write element to stream", ex);
-            handleUnexpectedStreamEnding();
-        }
-    }
-
-    @Override
-    public void onError(final Throwable throwable) {
-        log.error("Error while streaming", throwable);
-        handleUnexpectedStreamEnding();
-    }
-
-    @Override
-    public void onComplete() {
-        try {
-            handleStreamEnding();
-        } catch (IOException ex) {
-            log.error("Unable to end stream", ex);
-            handleUnexpectedStreamEnding();
-        }
-    }
 }

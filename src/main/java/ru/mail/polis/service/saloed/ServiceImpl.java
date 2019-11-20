@@ -217,6 +217,16 @@ public final class ServiceImpl extends HttpServer implements Service {
             final var nodes = clusterNodeRouter.allNodes();
             final var processor = new EntitiesRequestProcessor(nodes, httpClient, dao);
             metrics.request(arguments.isServiceRequest());
+            streamSession.whenStreamComplete()
+                .thenAccept(__ -> {
+                    metrics.successResponse(arguments.isServiceRequest());
+                    metrics.responseWithStatus(200);
+                })
+                .exceptionally(ex -> {
+                    metrics.errorResponse(arguments.isServiceRequest());
+                    metrics.responseWithStatus(500);
+                    return null;
+                });
             if (arguments.isServiceRequest()) {
                 processor.processForService(arguments, streamSession);
             } else {
@@ -262,5 +272,4 @@ public final class ServiceImpl extends HttpServer implements Service {
             log.error("Error during send response", exception);
         }
     }
-
 }
