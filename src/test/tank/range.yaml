@@ -1,0 +1,21 @@
+phantom:
+  address: 192.168.1.73:8080
+  load_profile:
+    load_type: rps
+    schedule: line(1, 250, 2m) const(180, 3m)
+autostop:
+  autostop:
+    - http(5xx, 25%, 10s)
+    - net(xx, 25%, 10s)
+    - time(1s, 10s)
+console:
+  enabled: true
+telegraf:
+  enabled: false
+overload:
+  enabled: true
+  job_name: Range
+  job_dsc: Range requests with fixed range size (1000)
+  token_file: token.txt
+  api_attempts: 5 # fix issue with Api error
+  api_timeout: 5
