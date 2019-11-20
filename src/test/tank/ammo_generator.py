@@ -48,11 +48,16 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('--rps', type=int, required=True,
                     help='Expected maximal RPS')
-parser.add_argument('--duration', type=durations.Duration, required=True,
-                    help='Expected maximal duration')
 parser.add_argument('--mode', type=LoadTestingMode,
                     choices=list(LoadTestingMode), required=True,
                     help=LoadTestingMode.help_message())
+parser.add_argument('--duration', type=durations.Duration, required=True,
+                    help='Expected maximal duration')
+parser.add_argument('--nodes', type=int, required=True,
+                    help='Number of nodes in testing cluster')
+parser.add_argument('--filler', type=int, required=False,
+                    help=("Optional: storage prefilling data amount."
+                          " Default: same is requests amount"))
 
 
 def generate_random_body_pool():
@@ -83,8 +88,9 @@ def generate_unique_keys(amount, template=''):
 class AmmoGenerator(object):
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, requests):
+    def __init__(self, requests, nodes):
         self.requests_amount = int(requests)
+        self.nodes = int(nodes) or 1
 
     @abc.abstractproperty
     def name(self):
@@ -169,13 +175,18 @@ class AmmoGenerator(object):
 class AmmoGeneratorWithPrefilling(AmmoGenerator):
     __metaclass__ = abc.ABCMeta
 
+    def __init__(self, requests, nodes, filler_size):
+        super(AmmoGeneratorWithPrefilling, self).__init__(requests, nodes)
+        self.filler_size = filler_size or self.requests_amount
+
     def get_filler_data(self):
-        return generate_unique_keys(self.requests_amount)
+        return generate_unique_keys(self.filler_size)
 
     def get_filler(self):
         filler_entities = self.get_filler_data()
+        replicas = '{}/{}'.format(self.nodes, self.nodes)
         requests = (
-            self.make_put(path='/v0/entity', id=key)
+            self.make_put(path='/v0/entity', id=key, replicas=replicas)
             for key in
             tqdm.tqdm(filler_entities, desc='Generate filler for ' + self.name)
         )
@@ -227,7 +238,7 @@ class GetGenerator(AmmoGeneratorWithPrefilling):
 
     def generate(self):
         entities = self.get_filler()
-        get_entities = np.random.choice(entities, len(entities))
+        get_entities = np.random.choice(entities, self.requests_amount)
         requests = self.make_requests(get_entities)
         self.save(requests)
 
@@ -237,7 +248,7 @@ class GetNewGenerator(GetGenerator):
 
     def generate(self):
         entities = self.get_filler()
-        distribution = np.random.exponential(scale=2, size=self.requests_amount)
+        distribution = np.random.exponential(scale=2, size=len(entities))
         weight = distribution / np.sum(distribution)
         weight = weight[::-1]
         get_entities = np.random.choice(entities, size=self.requests_amount,
@@ -286,7 +297,7 @@ class RangeGenerator(AmmoGeneratorWithPrefilling):
         return '/v0/entities'
 
     def get_filler_data(self):
-        return generate_unique_keys(self.requests_amount,
+        return generate_unique_keys(self.filler_size,
                                     template='entity_{:010d}')
 
     def build_request(self, data):
@@ -295,14 +306,13 @@ class RangeGenerator(AmmoGeneratorWithPrefilling):
 
     def generate(self):
         entities = self.get_filler()
-
-        def get_range(start):
-            end = start + self.RANGE_SIZE
-            start_idx, end_idx = np.clip([start, end], 0, len(entities) - 1)
-            return entities[start_idx], entities[end_idx]
-
-        ranges = [get_range(i) for i in range(self.requests_amount)]
-        random.shuffle(ranges)
+        max_start_idx = max(0, len(entities) - self.RANGE_SIZE - 1)
+        starts = np.random.random_integers(0, max_start_idx,
+                                           self.requests_amount)
+        ranges = [
+            (entities[start], entities[start + self.RANGE_SIZE])
+            for start in starts
+        ]
         requests = self.make_requests(ranges)
         self.save(requests)
 
@@ -326,7 +336,10 @@ def generate(args):
     generators = generators_for_mode(args.mode)
     requests = args.duration.to_seconds() * args.rps
     for generator in generators:
-        generator(requests).generate()
+        if issubclass(generator, AmmoGeneratorWithPrefilling):
+            generator(requests, args.nodes, args.filler).generate()
+        else:
+            generator(requests, args.nodes).generate()
 
 
 generate(parser.parse_args())

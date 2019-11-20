@@ -2,7 +2,7 @@ phantom:
   address: 192.168.1.73:8080
   load_profile:
     load_type: rps
-    schedule: line(1, 8000, 2m) const(8000, 3m)
+    schedule: line(1, 12000, 2m) const(8000, 3m)
 autostop:
   autostop:
     - http(5xx,25%,10s)
