@@ -218,7 +218,7 @@ public final class ServiceImpl extends HttpServer implements Service {
             final var processor = new EntitiesRequestProcessor(nodes, httpClient, dao);
             metrics.request(arguments.isServiceRequest());
             streamSession.whenStreamComplete()
-                .thenAccept(__ -> {
+                .thenAccept(ignored -> {
                     metrics.successResponse(arguments.isServiceRequest());
                     metrics.responseWithStatus(200);
                 })

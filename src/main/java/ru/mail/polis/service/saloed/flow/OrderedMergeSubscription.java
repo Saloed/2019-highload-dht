@@ -104,9 +104,6 @@ final class OrderedMergeSubscription<T extends Comparable<T>> implements Subscri
             final var minIndex = indexOfMinimal();
             final var min = values.get(minIndex).value;
             values.set(minIndex, SourceValue.empty());
-            if (subscriber == null) {
-                throw new IllegalStateException("Subscriber is not exists");
-            }
             subscriber.onNext(min);
 
             currentEmitted++;

@@ -83,7 +83,7 @@ public final class ServiceMetrics implements Closeable {
         errorResponse.incrementAndGet();
     }
 
-    public void errorResponse(final boolean isServiceRequest) {
+    void errorResponse(final boolean isServiceRequest) {
         if (isServiceRequest) {
             errorServiceResponse();
         } else {
